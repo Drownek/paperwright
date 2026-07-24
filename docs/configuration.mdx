@@ -148,7 +148,7 @@ plugwright {
 ```
 
 <ParamField path="downloadNode" type="Property<Boolean>">
-  Whether to automatically download Node.js for running tests. When `true` (the default), the plugin downloads a Node.js distribution into `build/plugwright/node`, verifies it against the official `SHASUMS256.txt` checksums from nodejs.org, and uses it for all `node`/`npm` invocations. When `false`, the system-installed `node`/`npm` are used instead.
+  Whether to automatically download Node.js for running tests. When `true` (the default), the plugin downloads a Node.js distribution into a shared per-user cache in the Gradle user home (`~/.gradle/caches/plugwright/node`), verifies it against the official `SHASUMS256.txt` checksums from nodejs.org, and uses it for all `node`/`npm` invocations. The cache is keyed by version, OS and architecture, is shared across all projects, and survives `gradle clean`. When `false`, the system-installed `node`/`npm` are used instead.
 
   <Note>Because this defaults to `true`, builds that previously relied on a system Node.js installation will download Node.js automatically unless you set this to `false`.</Note>
 </ParamField>

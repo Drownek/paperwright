@@ -5,6 +5,7 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.jvm.toolchain.JavaToolchainService
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 object BannerState {
@@ -14,6 +15,11 @@ object BannerState {
 class PlugwrightPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         val extension = project.extensions.create("plugwright", PlugwrightExtension::class.java, project)
+
+        // Shared per-user cache so Node.js is downloaded once for all projects
+        // and survives 'gradle clean'. Safe for concurrent builds thanks to the
+        // file lock in NodeManager.
+        val defaultNodeInstallDir = File(project.gradle.gradleUserHomeDir, "caches/plugwright/node")
 
         // Register plugwrightClean task
         val plugwrightClean = project.tasks.register("plugwrightClean") {
@@ -81,7 +87,7 @@ class PlugwrightPlugin : Plugin<Project> {
             runDirFiles.set(extension.runDirFiles)
             nodeVersion.set(extension.nodeVersion)
             downloadNode.set(extension.downloadNode)
-            nodeInstallDir.set(project.layout.buildDirectory.dir("plugwright/node"))
+            nodeInstallDir.set(defaultNodeInstallDir)
 
             // Support command line properties for filtering
             if (project.hasProperty("testFiles")) {
@@ -131,7 +137,7 @@ class PlugwrightPlugin : Plugin<Project> {
             runDirFiles.set(extension.runDirFiles)
             nodeVersion.set(extension.nodeVersion)
             downloadNode.set(extension.downloadNode)
-            nodeInstallDir.set(project.layout.buildDirectory.dir("plugwright/node"))
+            nodeInstallDir.set(defaultNodeInstallDir)
 
             serverJarPath.set(
                 extension.runDir.map { runDir ->
@@ -260,7 +266,7 @@ class PlugwrightPlugin : Plugin<Project> {
                 }
 
                 project.logger.lifecycle("Executing 'npm install' in ${targetDir.absolutePath}...")
-                val nodePaths = NodeManager.getOrDownloadNode(project.layout.buildDirectory.dir("plugwright/node").get().asFile, extension.nodeVersion.get(), extension.downloadNode.get())
+                val nodePaths = NodeManager.getOrDownloadNode(defaultNodeInstallDir, extension.nodeVersion.get(), extension.downloadNode.get())
 
                 try {
                     val isWin = System.getProperty("os.name").lowercase().contains("windows")
