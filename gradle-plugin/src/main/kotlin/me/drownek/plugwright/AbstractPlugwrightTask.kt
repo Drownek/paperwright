@@ -57,6 +57,9 @@ abstract class AbstractPlugwrightTask : DefaultTask() {
     @get:Input
     abstract val downloadNode: Property<Boolean>
 
+    @get:Internal
+    abstract val nodeInstallDir: DirectoryProperty
+
     protected fun prepareServerEnvironment(): File {
         val serverJar = serverJarPath.get()
         val serverDirectory = serverDir.get()

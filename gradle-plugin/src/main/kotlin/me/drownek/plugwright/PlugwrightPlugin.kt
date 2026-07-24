@@ -81,6 +81,7 @@ class PlugwrightPlugin : Plugin<Project> {
             runDirFiles.set(extension.runDirFiles)
             nodeVersion.set(extension.nodeVersion)
             downloadNode.set(extension.downloadNode)
+            nodeInstallDir.set(project.layout.buildDirectory.dir("plugwright/node"))
 
             // Support command line properties for filtering
             if (project.hasProperty("testFiles")) {
