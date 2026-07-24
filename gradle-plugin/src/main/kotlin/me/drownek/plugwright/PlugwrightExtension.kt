@@ -20,9 +20,11 @@ abstract class PlugwrightExtension(project: Project) {
     val nodeVersion: Property<String> = project.objects.property(String::class.java).convention("22.14.0")
 
     /**
-     * Whether to automatically download Node.js. If false, it will use the system-installed node/npm.
+     * Whether to automatically download Node.js. Disabled by default: the system-installed
+     * node/npm on PATH is used, and the build fails with instructions if Node.js is missing.
+     * Set to true to download a verified Node.js distribution into a shared per-user cache.
      */
-    val downloadNode: Property<Boolean> = project.objects.property(Boolean::class.java).convention(true)
+    val downloadNode: Property<Boolean> = project.objects.property(Boolean::class.java).convention(false)
 
     /**
      * Directory where the server will be run from.

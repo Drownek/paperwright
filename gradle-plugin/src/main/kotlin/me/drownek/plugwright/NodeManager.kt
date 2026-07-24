@@ -23,9 +23,27 @@ object NodeManager {
 
     data class NodePaths(val node: String, val npm: String)
 
+    private fun checkSystemNodeAvailable(isWindows: Boolean) {
+        val command = if (isWindows) listOf("cmd", "/c", "node", "--version") else listOf("node", "--version")
+        val available = try {
+            val process = ProcessBuilder(command).redirectErrorStream(true).start()
+            process.inputStream.bufferedReader().readText()
+            process.waitFor() == 0
+        } catch (e: Exception) {
+            false
+        }
+        if (!available) {
+            throw GradleException(
+                "Node.js not found on PATH. Install Node.js (https://nodejs.org), " +
+                    "or set 'plugwright { downloadNode.set(true) }' to let the plugin download it automatically."
+            )
+        }
+    }
+
     fun getOrDownloadNode(nodeInstallDir: File, nodeVersionOpt: String, downloadNodeOpt: Boolean): NodePaths {
         if (!downloadNodeOpt) {
             val isWindows = System.getProperty("os.name").lowercase().contains("win")
+            checkSystemNodeAvailable(isWindows)
             return NodePaths("node", if (isWindows) "npm.cmd" else "npm")
         }
 
