@@ -1,5 +1,6 @@
 package me.drownek.plugwright
 
+import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
@@ -104,18 +105,22 @@ abstract class PlugwrightTestTask : AbstractPlugwrightTask() {
             logger.lifecycle("Test names filter: $nameFilter")
         }
 
-        var cliJsPath = "node_modules/@drownek/plugwright/dist/cli.js"
-        val cliJsFile = File(userTestsDirectory, cliJsPath)
-        if (!cliJsFile.exists()) {
-            val fallbackFile = File(userTestsDirectory, "../../../../runner-package/dist/cli.js")
-            if (fallbackFile.exists()) {
-                cliJsPath = fallbackFile.absolutePath
-            }
-        }
+        val defaultCliJs = File(userTestsDirectory, "node_modules/@drownek/plugwright/dist/cli.js")
+        val cliJsFile = sequenceOf(
+            // Canonical path resolves npm symlink bugs on CI
+            defaultCliJs.canonicalFile,
+            defaultCliJs,
+            // Dev-environment fallback when running inside this repository
+            File(userTestsDirectory, "../../../../runner-package/dist/cli.js")
+        ).firstOrNull { it.exists() }
+            ?: throw GradleException(
+                "plugwright cli.js not found at ${defaultCliJs.absolutePath}. " +
+                    "Did 'npm install' succeed in ${userTestsDirectory.absolutePath}?"
+            )
 
         runCommand(
             userTestsDirectory, 
-            nodePaths.node, cliJsPath,
+            nodePaths.node, cliJsFile.absolutePath,
             env = envMap
         )
         
