@@ -131,6 +131,7 @@ class PlugwrightPlugin : Plugin<Project> {
             runDirFiles.set(extension.runDirFiles)
             nodeVersion.set(extension.nodeVersion)
             downloadNode.set(extension.downloadNode)
+            nodeInstallDir.set(project.layout.buildDirectory.dir("plugwright/node"))
 
             serverJarPath.set(
                 extension.runDir.map { runDir ->
@@ -259,7 +260,7 @@ class PlugwrightPlugin : Plugin<Project> {
                 }
 
                 project.logger.lifecycle("Executing 'npm install' in ${targetDir.absolutePath}...")
-                val nodePaths = NodeManager.getOrDownloadNode(project, extension.nodeVersion.get(), extension.downloadNode.get())
+                val nodePaths = NodeManager.getOrDownloadNode(project.layout.buildDirectory.dir("plugwright/node").get().asFile, extension.nodeVersion.get(), extension.downloadNode.get())
 
                 try {
                     val isWin = System.getProperty("os.name").lowercase().contains("windows")
