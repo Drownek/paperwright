@@ -1,7 +1,8 @@
 package me.drownek.plugwright
 
-import org.gradle.api.Project
 import org.gradle.api.GradleException
+import org.gradle.api.logging.Logger
+import org.gradle.api.logging.Logging
 import java.io.File
 import java.io.RandomAccessFile
 import java.net.URI
@@ -10,20 +11,26 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.time.Duration
+import java.util.zip.ZipFile
 
 object NodeManager {
 
+    private val logger: Logger = Logging.getLogger(NodeManager::class.java)
+
+    private val DOWNLOAD_TIMEOUT: Duration = Duration.ofMinutes(10)
+
     data class NodePaths(val node: String, val npm: String)
 
-    fun getOrDownloadNode(project: Project, nodeVersionOpt: String, downloadNodeOpt: Boolean): NodePaths {
+    fun getOrDownloadNode(nodeInstallDir: File, nodeVersionOpt: String, downloadNodeOpt: Boolean): NodePaths {
         if (!downloadNodeOpt) {
             val isWindows = System.getProperty("os.name").lowercase().contains("win")
             return NodePaths("node", if (isWindows) "npm.cmd" else "npm")
         }
 
         val nodeVersion = nodeVersionOpt.trim().removePrefix("v")
-        val nodeDir = project.layout.buildDirectory.dir("plugwright/node").get().asFile
+        val nodeDir = nodeInstallDir
         val osName = System.getProperty("os.name").lowercase()
         val osArch = System.getProperty("os.arch").lowercase()
 
@@ -54,9 +61,9 @@ object NodeManager {
         val ext = if (isWindows) "zip" else "tar.gz"
         val folderName = "node-v$nodeVersion-$os-$arch"
         val fileName = "$folderName.$ext"
-        
+
         val extractDir = File(nodeDir, folderName)
-        
+
         val nodeExe = if (isWindows) File(extractDir, "node.exe") else File(extractDir, "bin/node")
         val npmExe = if (isWindows) File(extractDir, "npm.cmd") else File(extractDir, "bin/npm")
 
@@ -64,69 +71,136 @@ object NodeManager {
 
         if (!markerFile.exists()) {
             nodeDir.mkdirs()
-            
-            val lockFile = File(nodeDir, "node-download.lock")
-            val raf = RandomAccessFile(lockFile, "rw")
-            val channel = raf.channel
-            // Acquire exclusive lock
-            val lock = channel.lock()
-            
-            try {
-                // Double check after acquiring lock
-                if (!markerFile.exists()) {
-                    project.logger.lifecycle("Node.js not found locally. Downloading Node.js v$nodeVersion for $os-$arch...")
-                    val downloadUrl = "https://nodejs.org/dist/v$nodeVersion/$fileName"
-                    val archiveFile = File(nodeDir, fileName)
-                    val tmpArchiveFile = File(nodeDir, "$fileName.tmp")
 
-                    if (!archiveFile.exists()) {
+            val lockFile = File(nodeDir, "node-download.lock")
+            RandomAccessFile(lockFile, "rw").use { raf ->
+                val channel = raf.channel
+                // Acquire exclusive lock
+                val lock = channel.lock()
+
+                try {
+                    // Double check after acquiring lock
+                    if (!markerFile.exists()) {
+                        val downloadUrl = "https://nodejs.org/dist/v$nodeVersion/$fileName"
+                        val archiveFile = File(nodeDir, fileName)
+                        val tmpArchiveFile = File(nodeDir, "$fileName.tmp")
+
                         val httpClient = HttpClient.newBuilder()
                             .followRedirects(HttpClient.Redirect.NORMAL)
                             .connectTimeout(Duration.ofSeconds(30))
                             .build()
 
-                        val request = HttpRequest.newBuilder()
-                            .uri(URI.create(downloadUrl))
-                            .GET()
-                            .build()
+                        if (!archiveFile.exists()) {
+                            logger.lifecycle("Node.js not found locally. Downloading Node.js v$nodeVersion for $os-$arch...")
 
-                        project.logger.lifecycle("Downloading from: $downloadUrl")
-                        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream())
-                        if (response.statusCode() != 200) {
-                            throw GradleException("Failed to download Node.js from $downloadUrl. Status code: ${response.statusCode()}")
+                            val request = HttpRequest.newBuilder()
+                                .uri(URI.create(downloadUrl))
+                                .timeout(DOWNLOAD_TIMEOUT)
+                                .GET()
+                                .build()
+
+                            logger.lifecycle("Downloading from: $downloadUrl")
+                            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream())
+                            if (response.statusCode() != 200) {
+                                throw GradleException("Failed to download Node.js from $downloadUrl. Status code: ${response.statusCode()}")
+                            }
+
+                            Files.copy(response.body(), tmpArchiveFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                            Files.move(tmpArchiveFile.toPath(), archiveFile.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                            logger.lifecycle("Downloaded Node.js archive.")
                         }
 
-                        Files.copy(response.body(), tmpArchiveFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                        Files.move(tmpArchiveFile.toPath(), archiveFile.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-                        project.logger.lifecycle("Downloaded Node.js archive.")
-                    }
+                        verifyChecksum(httpClient, nodeVersion, fileName, archiveFile)
 
-                    project.logger.lifecycle("Extracting Node.js archive...")
-                    if (isWindows) {
-                        project.copy {
-                            from(project.zipTree(archiveFile))
-                            into(nodeDir)
+                        logger.lifecycle("Extracting Node.js archive...")
+                        if (isWindows) {
+                            extractZip(archiveFile, nodeDir)
+                        } else {
+                            // Use native tar to preserve symlinks (bin/npm and bin/npx are
+                            // symlinks into lib/node_modules) and executable permissions.
+                            extractTarGz(archiveFile, nodeDir)
                         }
-                    } else {
-                        project.copy {
-                            from(project.tarTree(archiveFile))
-                            into(nodeDir)
+
+                        if (!nodeExe.exists() || !npmExe.exists()) {
+                            throw GradleException("Failed to extract Node.js or unexpected directory structure. Expected to find ${nodeExe.absolutePath} and ${npmExe.absolutePath}")
                         }
+
+                        markerFile.createNewFile()
                     }
-                    
-                    if (!nodeExe.exists()) {
-                        throw GradleException("Failed to extract Node.js or unexpected directory structure. Expected to find ${nodeExe.absolutePath}")
-                    }
-                    
-                    markerFile.createNewFile()
+                } finally {
+                    lock.release()
                 }
-            } finally {
-                lock.release()
-                channel.close()
-                raf.close()
             }
         }
 
         return NodePaths(nodeExe.absolutePath, npmExe.absolutePath)
+    }
+
+    private fun verifyChecksum(httpClient: HttpClient, nodeVersion: String, fileName: String, archiveFile: File) {
+        val shasumsUrl = "https://nodejs.org/dist/v$nodeVersion/SHASUMS256.txt"
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create(shasumsUrl))
+            .timeout(Duration.ofMinutes(1))
+            .GET()
+            .build()
+
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw GradleException("Failed to download Node.js checksums from $shasumsUrl. Status code: ${response.statusCode()}")
+        }
+
+        val expectedChecksum = response.body().lineSequence()
+            .map { it.trim().split(Regex("\\s+")) }
+            .firstOrNull { it.size >= 2 && it[1] == fileName }
+            ?.get(0)
+            ?: throw GradleException("No checksum entry for $fileName found in $shasumsUrl")
+
+        val digest = MessageDigest.getInstance("SHA-256")
+        archiveFile.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        val actualChecksum = digest.digest().joinToString("") { "%02x".format(it) }
+
+        if (!actualChecksum.equals(expectedChecksum, ignoreCase = true)) {
+            archiveFile.delete()
+            throw GradleException("SHA-256 checksum mismatch for $fileName. Expected $expectedChecksum but was $actualChecksum. The corrupted archive was deleted; please re-run the build.")
+        }
+        logger.lifecycle("Verified Node.js archive checksum (SHA-256).")
+    }
+
+    private fun extractTarGz(archiveFile: File, destinationDir: File) {
+        val process = ProcessBuilder("tar", "-xzf", archiveFile.absolutePath, "-C", destinationDir.absolutePath)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().readText()
+        val exitCode = process.waitFor()
+        if (exitCode != 0) {
+            throw GradleException("Failed to extract ${archiveFile.name} with tar (exit code $exitCode): $output")
+        }
+    }
+
+    private fun extractZip(archiveFile: File, destinationDir: File) {
+        ZipFile(archiveFile).use { zip ->
+            val destPath = destinationDir.canonicalFile.toPath()
+            for (entry in zip.entries()) {
+                val target = File(destinationDir, entry.name)
+                if (!target.canonicalFile.toPath().startsWith(destPath)) {
+                    throw GradleException("Refusing to extract zip entry outside of destination directory: ${entry.name}")
+                }
+                if (entry.isDirectory) {
+                    target.mkdirs()
+                } else {
+                    target.parentFile?.mkdirs()
+                    zip.getInputStream(entry).use { input ->
+                        Files.copy(input, target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    }
+                }
+            }
+        }
     }
 }

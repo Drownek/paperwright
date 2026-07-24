@@ -2,6 +2,7 @@ package me.drownek.plugwright
 
 import com.google.gson.JsonParser
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*

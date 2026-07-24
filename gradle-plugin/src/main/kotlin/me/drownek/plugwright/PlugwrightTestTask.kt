@@ -26,7 +26,7 @@ abstract class PlugwrightTestTask : AbstractPlugwrightTask() {
 
     @TaskAction
     fun runTests() {
-        val nodePaths = NodeManager.getOrDownloadNode(project, nodeVersion.get(), downloadNode.get())
+        val nodePaths = NodeManager.getOrDownloadNode(nodeInstallDir.get().asFile, nodeVersion.get(), downloadNode.get())
         prepareServerEnvironment()
 
         val serverJar = serverJarPath.get()
