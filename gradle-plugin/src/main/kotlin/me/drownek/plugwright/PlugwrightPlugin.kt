@@ -271,9 +271,14 @@ class PlugwrightPlugin : Plugin<Project> {
                 try {
                     val isWin = System.getProperty("os.name").lowercase().contains("windows")
                     val cmd = if (isWin) listOf("cmd", "/c", nodePaths.npm, "install") else listOf(nodePaths.npm, "install")
+                    val nodeDir = File(nodePaths.node).parent
                     val execResult = project.exec {
                         workingDir = targetDir
                         commandLine = cmd
+                        if (nodeDir != null) {
+                            val pathKey = environment.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
+                            environment[pathKey] = nodeDir + File.pathSeparator + (environment[pathKey] ?: "")
+                        }
                         isIgnoreExitValue = true
                     }
 
