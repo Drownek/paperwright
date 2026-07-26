@@ -176,9 +176,14 @@ class PlugwrightPlugin : Plugin<Project> {
                 val propertyDir = project.findProperty("plugwrightDir") as? String
 
                 val inputDir = propertyDir ?: run {
-                    project.logger.lifecycle("Enter the test directory location [default: $defaultDir]:")
-                    val consoleInput = readlnOrNull()?.trim()
-                    if (consoleInput.isNullOrEmpty()) defaultDir else consoleInput
+                    if (System.console() != null) {
+                        project.logger.lifecycle("Enter the test directory location [default: $defaultDir]:")
+                        val consoleInput = readlnOrNull()?.trim()
+                        if (consoleInput.isNullOrEmpty()) defaultDir else consoleInput
+                    } else {
+                        project.logger.lifecycle("Non-interactive environment detected. Using default test directory: $defaultDir")
+                        defaultDir
+                    }
                 }
 
                 project.logger.lifecycle("Using directory: $inputDir")
