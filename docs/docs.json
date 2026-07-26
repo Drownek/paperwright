@@ -9,8 +9,7 @@
   },
   "navbar": {
     "primary": {
-      "type": "button",
-      "label": "GitHub",
+      "type": "github",
       "href": "https://github.com/Drownek/plugwright"
     }
   },
