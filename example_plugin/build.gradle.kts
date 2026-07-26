@@ -12,6 +12,7 @@ plugwright {
     downloadPlugins {
         url("https://hangarcdn.papermc.io/plugins/HelpChat/PlaceholderAPI/versions/2.11.6/PAPER/PlaceholderAPI-2.11.6.jar")
     }
+    downloadNode.set(System.getenv("CI") != "true")
 }
 
 group = "me.drownek"
