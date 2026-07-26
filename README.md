@@ -64,7 +64,7 @@ plugwright {
         // ... etc
     }
 
-    // Automatically download Node if not present
+    // If true, always downloads and uses an isolated Node.js version, ignoring the system Node.
     // downloadNode.set(true)
 }
 ```
