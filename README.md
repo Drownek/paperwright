@@ -38,7 +38,12 @@ End-to-end testing framework for Paper/Spigot Minecraft plugins. Supports JavaSc
 
 ## Quick Start
 
-> **Prerequisites:** Java 17+, Gradle 7+, Node.js 16+, and a Paper/Spigot plugin project.
+**0. Prerequisites:**
+Before you begin, you need:
+- **Java 17** or higher
+- **Gradle 7** or higher
+- **Node.js** (for running the test runner, can be downloaded automatically by using downloadNode setting)
+- **A Paper/Spigot plugin project**
 
 **1. Add the plugin to your `build.gradle.kts`:**
 
@@ -58,6 +63,9 @@ plugwright {
         url("https://url.to/plugin2.jar")
         // ... etc
     }
+
+    // Automatically download Node if not present
+    // downloadNode.set(true)
 }
 ```
 

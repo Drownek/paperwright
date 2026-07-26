@@ -7,7 +7,9 @@ description: "Start running your first test in less than 5 minutes."
   <Step title="Prerequisites">
     Before you begin, you need:
     - **Java 17** or higher
-    - **Node.js** (for running the test runner)
+    - **Gradle 7** or higher
+    - **Node.js** (for running the test runner, can be downloaded automatically by using downloadNode setting)
+    - **A Paper/Spigot plugin project**
   </Step>
 
   <Step title="Installation">
@@ -16,6 +18,22 @@ description: "Start running your first test in less than 5 minutes."
     ```kotlin
     plugins {
         id("io.github.drownek.plugwright") version "2.0.2"
+    }
+
+    plugwright {
+        minecraftVersion.set("1.19.4")
+        testsDir.set(file("src/test/e2e"))
+        acceptEula.set(true)
+
+        // Download some dependencies your plugin might need
+        downloadPlugins {
+            url("https://url.to/plugin1.jar")
+            url("https://url.to/plugin2.jar")
+            // ... etc
+        }
+
+        // Automatically download Node if not present
+        // downloadNode.set(true)
     }
     ```
   </Step>
@@ -29,15 +47,9 @@ description: "Start running your first test in less than 5 minutes."
   </Step>
 
   <Step title="Your First Test">
-    Here's an example of the simplest test. Plugwright starts the server, connects a bot, and makes it type a command:
-
-    ```javascript
-    import { expect, test } from '@drownek/plugwright';
-
-    test('help displays message', async ({ player }) => {
-      player.chat('/help');
-      await expect(player).toHaveReceivedMessage('Help');
-    });
+    Run your tests:
+    ```bash
+    ./gradlew plugwrightTest
     ```
   </Step>
 </Steps>
