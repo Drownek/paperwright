@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "Plugwright",
   "colors": {
-    "primary": "#10b981",
-    "light": "#059669",
-    "dark": "#34d399"
+    "primary": "#1ED760",
+    "light": "#42E27C",
+    "dark": "#17A84B"
   },
   "navbar": {
     "primary": {
