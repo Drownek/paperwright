@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "Plugwright",
   "colors": {
-    "primary": "#22ff88",
-    "light": "#22ff88",
-    "dark": "#22ff88"
+    "primary": "#10b981",
+    "light": "#059669",
+    "dark": "#34d399"
   },
   "navbar": {
     "primary": {
@@ -31,8 +31,8 @@
           "writing-tests",
           "gui-testing",
           "matchers",
-          "test-filtering",
           "examples",
+          "test-filtering",
           "ci-cd",
           "api-reference"
         ]

@@ -34,6 +34,51 @@ const gui = await player.gui({ title: 'Shop' });
 const button = gui.locator(i => i.getDisplayName().includes('Confirm'));
 ```
 
+### `player.makeOp()`
+
+Grants operator status to the player.
+
+```javascript
+await player.makeOp();
+player.chat('/admin'); // Now has permission
+```
+
+### `player.deOp()`
+
+Removes operator status from the player.
+
+```javascript
+await player.deOp();
+```
+
+### `player.setGameMode(mode)`
+
+Changes the player's game mode.
+
+<ParamField path="mode" type="string" required>
+  'survival' | 'creative' | 'adventure' | 'spectator'
+</ParamField>
+
+```javascript
+await player.setGameMode('creative');
+```
+
+### `player.teleport(x, y, z)`
+
+Teleports the player to coordinates.
+
+```javascript
+await player.teleport(0, 100, 0);
+```
+
+### `player.giveItem(item, count?)`
+
+Gives items to the player.
+
+```javascript
+await player.giveItem('diamond', 64);
+```
+
 ### Properties
 
 <ResponseField name="inventory" type="Inventory">
@@ -60,4 +105,84 @@ Executes a command from the server console.
 
 ```javascript
 server.execute(`give ${player.username} diamond 64`);
+```
+
+## Exported Utilities
+
+The Plugwright framework exports several utility functions to help you write robust tests.
+
+### `createPlayer()`
+
+Creates a new, independent player bot that joins the server. Useful for multi-user tests.
+
+```javascript
+const player2 = await createPlayer();
+player2.chat('/tpa ' + player.username);
+```
+
+### `sleep(ms)`
+
+Pauses execution for a specified number of milliseconds.
+
+<ParamField path="ms" type="number" required>
+  Milliseconds to sleep.
+</ParamField>
+
+```javascript
+await sleep(1000);
+```
+
+### `poll(fn, options?)`
+
+Repeatedly executes a function until it returns a value that is not `undefined`, and returns that value. Useful when you are waiting for an object or value to exist and need to extract it.
+
+<ParamField path="fn" type="function" required>
+  Function to poll.
+</ParamField>
+<ParamField path="options.timeout" type="number">
+  Max wait time in ms (default: 5000ms).
+</ParamField>
+<ParamField path="options.pollingRate" type="number">
+  Check interval in ms (default: 100ms).
+</ParamField>
+
+```javascript
+await poll(() => player.inventory.hasItem('diamond'));
+```
+
+### `waitForAssertion(fn, options?)`
+
+Executes an assertion function repeatedly until it passes or times out. Ideal for `expect` statements.
+
+<ParamField path="fn" type="function" required>
+  Assertion function.
+</ParamField>
+
+```javascript
+await waitForAssertion(() => {
+  expect(gui.title).toContain('Shop');
+});
+```
+
+### `waitUntil(predicate, options?)`
+
+Repeatedly executes a boolean function until it returns `true`. Useful when you simply want to pause execution until a condition is met, without extracting any data.
+
+```javascript
+await waitUntil(() => player.gameMode === 'creative');
+```
+
+### `waitForStable(fn, options?)`
+
+Waits for a value returned by a function to remain unchanged for a specified duration. Useful for waiting for a UI to finish animating or loading.
+
+<ParamField path="fn" type="function" required>
+  Function to evaluate.
+</ParamField>
+<ParamField path="options.stableTime" type="number">
+  Time the value must remain stable in ms (default: 500ms).
+</ParamField>
+
+```javascript
+await waitForStable(() => player.inventory.items.length);
 ```
