@@ -25,29 +25,35 @@ function replaceRegexInFile(filePath, regex, replacement) {
     console.log(`  Updated ${filePath}`);
 }
 
-function bumpVersionFiles(newVersion) {
+function bumpVersionFiles(newVersion, isPrerelease) {
     console.log("\nUpdating version references in source files...");
 
-    const gradleFiles = [
-        "README.md",
-        "docs/quickstart.mdx",
-        "example_plugin/build.gradle.kts",
-    ];
+    if (!isPrerelease) {
+        const docFiles = [
+            "README.md",
+            "docs/quickstart.mdx",
+        ];
 
-    // Matches any version inside the quotes, e.g., id("...") version "1.x.x"
-    for (const file of gradleFiles) {
+        for (const file of docFiles) {
+            replaceRegexInFile(
+                file,
+                /id\("io\.github\.drownek\.plugwright"\) version "[^"]+"/g,
+                `id("io.github.drownek.plugwright") version "${newVersion}"`
+            );
+        }
+
+        // Matches any version after the package name, e.g., "@drownek/plugwright": "^1.x.x"
         replaceRegexInFile(
-            file,
-            /id\("io\.github\.drownek\.plugwright"\) version "[^"]+"/g,
-            `id("io.github.drownek.plugwright") version "${newVersion}"`
+            "gradle-plugin/src/main/kotlin/me/drownek/plugwright/PlugwrightPlugin.kt",
+            /"@drownek\/plugwright": "\^[^"]+"/g,
+            `"@drownek/plugwright": "^${newVersion}"`
         );
     }
 
-    // Matches any version after the package name, e.g., "@drownek/plugwright": "^1.x.x"
     replaceRegexInFile(
-        "gradle-plugin/src/main/kotlin/me/drownek/plugwright/PlugwrightPlugin.kt",
-        /"@drownek\/plugwright": "\^[^"]+"/g,
-        `"@drownek/plugwright": "^${newVersion}"`
+        "example_plugin/build.gradle.kts",
+        /id\("io\.github\.drownek\.plugwright"\) version "[^"]+"/g,
+        `id("io.github.drownek.plugwright") version "${newVersion}"`
     );
 }
 
@@ -91,15 +97,15 @@ async function main() {
         { cwd: "example_plugin/src/test/e2e", stdio: "inherit" }
     );
 
-    // bump version references in source files only for stable releases
-    const changedSourceFiles = [];
+    // bump version references in source files (docs and templates only for stable releases)
+    const changedSourceFiles = [
+        "example_plugin/build.gradle.kts",
+    ];
+    bumpVersionFiles(newVersion, isPrerelease);
     if (!isPrerelease) {
-        // We no longer require `oldVersion` to match exactly, we just pass `newVersion`
-        bumpVersionFiles(newVersion);
         changedSourceFiles.push(
             "README.md",
             "docs/quickstart.mdx",
-            "example_plugin/build.gradle.kts",
             "gradle-plugin/src/main/kotlin/me/drownek/plugwright/PlugwrightPlugin.kt",
         );
     }
