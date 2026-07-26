@@ -245,53 +245,6 @@ test('navigate through pages', async ({ player }) => {
 });
 ```
 
-## Player Helper Methods
-
-### `player.makeOp()`
-
-Grants operator status to the player.
-
-```javascript
-await player.makeOp();
-player.chat('/admin'); // Now has permission
-```
-
-### `player.deOp()`
-
-Removes operator status from the player.
-
-```javascript
-await player.deOp();
-```
-
-### `player.setGameMode(mode)`
-
-Changes the player's game mode.
-
-<ParamField path="mode" type="string" required>
-  'survival' | 'creative' | 'adventure' | 'spectator'
-</ParamField>
-
-```javascript
-await player.setGameMode('creative');
-```
-
-### `player.teleport(x, y, z)`
-
-Teleports the player to coordinates.
-
-```javascript
-await player.teleport(0, 100, 0);
-```
-
-### `player.giveItem(item, count?)`
-
-Gives items to the player.
-
-```javascript
-await player.giveItem('diamond', 64);
-```
-
 ## Legacy API (Deprecated)
 
 <Warning>
