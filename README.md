@@ -6,7 +6,7 @@
 
 End-to-end testing framework for Paper/Spigot Minecraft plugins. Supports JavaScript and TypeScript.
 
-![Showcase](https://github.com/user-attachments/assets/0272a6d9-f9ab-4486-8bf3-ee5909a10ee9)
+![Video showcase demonstrating Plugwright bots joining a server, moving, and interacting with GUIs](https://github.com/user-attachments/assets/0272a6d9-f9ab-4486-8bf3-ee5909a10ee9)
 
 > 👉 **[Read the full documentation at plugwright.dev](https://plugwright.dev)**
 
@@ -65,12 +65,18 @@ plugwright {
     }
 
     // If true, always downloads and uses an isolated Node.js version, ignoring the system Node.
-    // downloadNode.set(true)
+    downloadNode.set(true)
 }
 ```
 
+> **💡 Tip:** If you already have Node.js installed on your system, you can comment out `downloadNode.set(true)` to speed up initialization. Otherwise, leave it uncommented.
+
 **2. Initialize the test folder:**
 
+Run the init command to set up your test folder.
+This will automatically generate your package.json, TypeScript configuration, and an example test in a chosen directory.
+
+This command is interactive, so simply follow the prompts on your screen:
 ```bash
 ./gradlew plugwrightInit
 ```
@@ -80,6 +86,8 @@ plugwright {
 ```bash
 ./gradlew plugwrightTest
 ```
+
+> **💡 Tip:** Plugwright hooks into your build process and tests against your compiled plugin jar. Ensure your plugin compiles successfully (e.g. `jar` or `shadowJar` task) before running tests!
 
 > **💡 Want to see a working example?** Check out the [example_plugin](./example_plugin) directory in this repository.
 
