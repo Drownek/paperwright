@@ -7,7 +7,7 @@ description: "Learn how to write and structure your Plugwright tests."
 
 Tests use a simple API similar to Jest:
 
-```javascript
+```typescript
 import { test, expect } from '@drownek/plugwright';
 
 test('test description', async ({ player }) => {
@@ -17,9 +17,9 @@ test('test description', async ({ player }) => {
 
 ## Your First Test
 
-Create `src/test/e2e/first.spec.js`:
+Create `src/test/e2e/first.spec.ts`:
 
-```javascript
+```typescript
 import { test, expect } from '@drownek/plugwright';
 
 test('player receives welcome message', async ({ player }) => {
@@ -31,7 +31,7 @@ test('player receives welcome message', async ({ player }) => {
 
 ### Testing Commands
 
-```javascript
+```typescript
 test('help command works', async ({ player }) => {
   player.chat('/help');
   await expect(player).toHaveReceivedMessage('Available commands');
@@ -45,7 +45,7 @@ test('admin command requires permission', async ({ player }) => {
 
 ### Testing Economy
 
-```javascript
+```typescript
 test('player starts with default balance', async ({ player }) => {
   player.chat('/balance');
   await expect(player).toHaveReceivedMessage('$1000');
@@ -61,7 +61,7 @@ test('player can purchase items', async ({ player, server }) => {
 
 ### Testing Inventory
 
-```javascript
+```typescript
 test('player inventory has starter items', async ({ player }) => {
   player.chat('/starter');
   await expect(player).toContainItem('diamond_sword');
@@ -71,7 +71,7 @@ test('player inventory has starter items', async ({ player }) => {
 
 ### Server Operations
 
-```javascript
+```typescript
 test('server executes commands', async ({ player, server }) => {
   server.execute(`give ${player.username} diamond 64`);
   await expect(player).toContainItem('diamond');
@@ -89,7 +89,7 @@ Each test receives a context object with:
 
 ### Player Actions
 
-```javascript
+```typescript
 player.chat('/command')        // Send chat/command
 player.chat('Hello!')          // Send chat message
 await player.gui({ title: 'Title' })     // Wait for GUI window
@@ -99,7 +99,7 @@ player.bot                           // Underlying Mineflayer bot
 
 ### Assertions
 
-```javascript
+```typescript
 // Chat message (partial match, 5s timeout)
 await expect(player).toHaveReceivedMessage('text')
 
@@ -111,7 +111,7 @@ await expect(player).toContainItem('item_name')
 
 The framework provides several exported utilities for advanced waiting and polling:
 
-```javascript
+```typescript
 import { test, sleep, poll, waitForAssertion, waitUntil, waitForStable } from '@drownek/plugwright';
 
 test('advanced waiting', async ({ player }) => {

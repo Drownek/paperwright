@@ -33,13 +33,20 @@ description: "Start running your first test in less than 5 minutes."
         }
 
         // If true, always downloads and uses an isolated Node.js version, ignoring the system Node.
-        // downloadNode.set(true)
+        downloadNode.set(true)
     }
     ```
+
+    <Tip>
+      If you already have Node.js installed on your system, you can comment out `downloadNode.set(true)` to speed up initialization. Otherwise, leave it uncommented.
+    </Tip>
   </Step>
 
   <Step title="Initialization">
-    Run the init command to set up the default configuration and an example test in your project:
+    Run the init command to set up your test folder.
+    This will automatically generate your package.json, TypeScript configuration, and an example test in a chosen directory.
+
+    This command is interactive, so simply follow the prompts on your screen:
 
     ```bash
     ./gradlew plugwrightInit
@@ -51,5 +58,9 @@ description: "Start running your first test in less than 5 minutes."
     ```bash
     ./gradlew plugwrightTest
     ```
+
+    <Tip>
+      Plugwright hooks into your build process and tests against your compiled plugin jar. Ensure your plugin compiles successfully (e.g. `jar` or `shadowJar` task) before running tests!
+    </Tip>
   </Step>
 </Steps>
