@@ -31,6 +31,30 @@ bukkit {
         register("warps") {
             description = "Warps paginated GUI"
         }
+        register("admin") {
+            description = "Admin command"
+        }
+        register("balance") {
+            description = "Economy balance command"
+        }
+        register("pay") {
+            description = "Economy pay command"
+        }
+        register("eco") {
+            description = "Economy admin command"
+        }
+        register("shop") {
+            description = "Shop command"
+        }
+        register("warp") {
+            description = "Warp command"
+        }
+        register("kit") {
+            description = "Kit command"
+        }
+        register("arena") {
+            description = "Arena command"
+        }
     }
 }
 
