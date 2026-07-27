@@ -3,22 +3,23 @@
 [![Gradle Plugin Portal](https://img.shields.io/gradle-plugin-portal/v/io.github.drownek.plugwright?label=Gradle%20Plugin%20Portal)](https://plugins.gradle.org/plugin/io.github.drownek.plugwright)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/Drownek/plugwright/actions/workflows/ci.yml/badge.svg)](https://github.com/Drownek/plugwright/actions/workflows/ci.yml)
+[![Read The Docs](https://img.shields.io/badge/Docs-Read_Here-007EC6?logo=readthedocs&logoColor=white)](https://plugwright.dev)
 
 End-to-end testing framework for Paper/Spigot Minecraft plugins. Supports JavaScript and TypeScript.
 
 ![Video showcase demonstrating Plugwright bots joining a server, moving, and interacting with GUIs](https://github.com/user-attachments/assets/0272a6d9-f9ab-4486-8bf3-ee5909a10ee9)
 
-> 👉 **[Read the full documentation at plugwright.dev](https://plugwright.dev)**
+<details>
+<summary>⚠️ <strong>Upgrading from Paperwright (v1.x)? Click here for migration steps.</strong></summary>
+<br>
+This framework has been renamed from Paperwright to Plugwright. If you are upgrading from an older version, update the following:
 
-
-> [!WARNING]
-> **Migration from Paperwright (v1.x to v2.0)**
-> This framework has been renamed from **Paperwright** to **Plugwright**. If you are upgrading from an older version, you must update the following things in your project:
-> 1. Change `id("io.github.drownek.paperwright")` to `id("io.github.drownek.plugwright")`.
-> 2. Rename your `paperwright { ... }` configuration block to `plugwright { ... }` and Gradle tasks (e.g. `./gradlew paperwrightTest` to `./gradlew plugwrightTest`).
-> 3. In your `package.json`, change `@drownek/paperwright` to `@drownek/plugwright` and run `npm install`.
-> 4. Update your test files: `import { test } from '@drownek/paperwright'` to `import { test } from '@drownek/plugwright'`.
-> 5. Change your CI to use `drownek/plugwright-action@v1`.
+1. Change `id("io.github.drownek.paperwright")` to `id("io.github.drownek.plugwright")`.
+2. Rename your `paperwright { ... }` configuration block to `plugwright { ... }` and Gradle tasks (e.g. `./gradlew paperwrightTest` to `./gradlew plugwrightTest`).
+3. In your `package.json`, change `@drownek/paperwright` to `@drownek/plugwright` and run `npm install`.
+4. Update your test files: `import { test } from '@drownek/paperwright'` to `import { test } from '@drownek/plugwright'`.
+5. Change your CI to use `drownek/plugwright-action@v1`.
+</details>
 
 ## Features
 
