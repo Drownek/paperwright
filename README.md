@@ -50,7 +50,7 @@ Before you begin, you need:
 
 ```kotlin
 plugins {
-    id("io.github.drownek.plugwright") version "2.0.2"
+    id("io.github.drownek.plugwright") version "2.0.3"
 }
 
 plugwright {
