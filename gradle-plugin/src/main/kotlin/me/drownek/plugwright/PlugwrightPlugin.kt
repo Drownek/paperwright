@@ -7,6 +7,13 @@ import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.jvm.toolchain.JavaToolchainService
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
+
+interface InjectedExecOps {
+    @get:Inject
+    val execOperations: ExecOperations
+}
 
 object BannerState {
     val printed = AtomicBoolean(false)
@@ -277,7 +284,9 @@ class PlugwrightPlugin : Plugin<Project> {
                     val isWin = System.getProperty("os.name").lowercase().contains("windows")
                     val cmd = if (isWin) listOf("cmd", "/c", nodePaths.npm, "install") else listOf(nodePaths.npm, "install")
                     val nodeDir = File(nodePaths.node).parent
-                    val execResult = project.exec {
+
+                    val execOps = project.objects.newInstance(InjectedExecOps::class.java)
+                    val execResult = execOps.execOperations.exec {
                         workingDir = targetDir
                         commandLine = cmd
                         if (nodeDir != null) {
