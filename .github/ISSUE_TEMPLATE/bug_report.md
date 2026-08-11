@@ -1,29 +1,27 @@
 ---
-name: Bug report
-about: Create a report to help us improve Plugwright
+name: 🐛 Bug report
+about: Something is not working as expected? Let's fix it!
 title: ''
 labels: bug
 assignees: ''
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+👋 **Hi there! Thanks for reporting a bug.** 
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Run command '....'
-3. See error
+**What's the problem?**
+Tell us what went wrong. No need to be overly formal!
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**How can we reproduce it?**
+Steps to reproduce the behavior, or a small code snippet.
+1. 
+2. 
 
-**Environment:**
- - OS: [e.g. Windows, Ubuntu]
- - Node.js version: [e.g. 18.x]
- - Java version: [e.g. 17]
- - Plugwright version: [e.g. 1.3.3]
- - Minecraft version: [e.g. 1.19.4]
+**What did you expect?**
+What should have happened instead?
 
-**Additional context**
-Add any other context about the problem here (e.g., if you are testing a specific NMS version or using a specific GUI framework).
+**Your Environment (if known):**
+ - Plugwright version: 
+ - Minecraft version: 
+
+**Anything else?**
+Any error logs, screenshots, or additional context.

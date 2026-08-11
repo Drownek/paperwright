@@ -1,19 +1,21 @@
 ---
-name: Feature request
-about: Suggest an idea for Plugwright
+name: 🚀 Feature request
+about: Have a great idea for Plugwright? Suggest it here!
 title: ''
 labels: enhancement
 assignees: ''
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+👋 **Hi there! Thanks for your suggestion.** 
+
+**Is your feature request related to a problem?**
+E.g. "I'm always frustrated when I have to..."
 
 **Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+What should Plugwright do differently?
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+**Describe alternatives you've considered (optional)**
+Are there other ways to solve this right now?
 
 **Additional context**
-Add any other context or screenshots about the feature request here.
+Any other thoughts, ideas, or screenshots?

@@ -130,6 +130,11 @@ For full examples on how to test **GUIs**, **multi-bot interactions**, **NMS**, 
 
 > 👉 **[Read the full documentation at plugwright.dev](https://plugwright.dev)**
 
+## Support & Community
+
+Got a question, found a bug, or want to suggest a feature? 
+👉 **[Open an issue](https://github.com/Drownek/plugwright/issues)** - don't hesitate, even if it's just a beginner question!
+
 ## License
 
 MIT
