@@ -1,0 +1,46 @@
+name: 🐛 Bug report
+description: Something is not working as expected? Let's fix it!
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        👋 **Hi there! Thanks for reporting a bug.** 
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: Tell us what went wrong. No need to be overly formal!
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we reproduce it?
+      description: Steps to reproduce the behavior, or a small code snippet.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: input
+    id: plugwright_version
+    attributes:
+      label: Plugwright version
+      placeholder: e.g. 1.3.3
+  - type: input
+    id: minecraft_version
+    attributes:
+      label: Minecraft version
+      placeholder: e.g. 1.19.4
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Any error logs, screenshots, or additional context.
+    validations:
+      required: false

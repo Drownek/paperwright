@@ -1,0 +1,22 @@
+name: 💬 Question / Help
+description: Need help setting things up? Ask here!
+labels: ["help wanted", "question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        👋 **Hi there! Need some help?**
+  - type: textarea
+    id: question
+    attributes:
+      label: What's your question?
+      description: Don't worry if it sounds like a beginner question. We're here to help!
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Tell us what you're trying to achieve (e.g. testing a specific plugin, running on CI).
+    validations:
+      required: true

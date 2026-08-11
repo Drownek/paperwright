@@ -1,0 +1,36 @@
+name: 🚀 Feature request
+description: Have a great idea for Plugwright? Suggest it here!
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        👋 **Hi there! Thanks for your suggestion.**
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: E.g. "I'm always frustrated when I have to..."
+    validations:
+      required: false
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the solution you'd like
+      description: What should Plugwright do differently?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe alternatives you've considered
+      description: Are there other ways to solve this right now?
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any other thoughts, ideas, or screenshots?
+    validations:
+      required: false
