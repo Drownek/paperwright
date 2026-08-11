@@ -5,7 +5,7 @@ import { pathToFileURL } from 'url';
 import { randomUUID } from 'node:crypto';
 import { install as installSourceMapSupport } from 'source-map-support';
 import pc from 'picocolors';
-import { ItemWrapper, GuiWrapper } from './lib/wrappers.js';
+import { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator } from './lib/wrappers.js';
 import { PlayerWrapper } from './lib/player.js';
 import { ServerWrapper } from './lib/server.js';
 import { testRegistry, scopeStack } from './lib/test-registry.js';
@@ -17,7 +17,7 @@ import type { TestResult } from './lib/types.js';
 installSourceMapSupport();
 
 // Re-export public API
-export { ItemWrapper, GuiWrapper };
+export { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator };
 export { PlayerWrapper } from './lib/player.js';
 export { ServerWrapper } from './lib/server.js';
 export { test, opTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
