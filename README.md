@@ -24,6 +24,7 @@ This framework has been renamed from Paperwright to Plugwright. If you are upgra
 ## Features
 
 `🚀` **Setup** – Automated server lifecycle management with Paper server downloads.
+  * **Supported Minecraft versions:** 1.8 to 1.21.11 (1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21, 1.21.9, 1.21.11)
 
 `🎮` **Bot Testing** – Powered by Mineflayer. Bots join, move, chat, and click GUIs like real players.
 
