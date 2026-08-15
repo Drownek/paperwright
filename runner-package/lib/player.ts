@@ -233,7 +233,19 @@ export class PlayerWrapper {
 
     async makeOp(): Promise<void> {
         this.requireServer();
-        this.serverWrapper!.execute(`minecraft:op ${this.username}`);
+        const command = `minecraft:op ${this.username}`;
+
+        // A console that answers (RCON) says whether the command worked; the confirmation is
+        // never broadcast to the player, so there is nothing to wait for in the chat buffer.
+        if (this.session.console?.output === 'responses') {
+            const response = await this.serverWrapper!.executeAndWait(command);
+            // "Made X a server operator" on success, "Nothing changed. The player already is
+            // an operator" when it was already granted — both mean the player is op now.
+            if (/operator/i.test(response)) return;
+            throw new Error(`Player ${this.username} was not opped: ${response.trim() || 'no response from the console'}`);
+        }
+
+        this.serverWrapper!.execute(command);
 
         await poll(
             () => this.messageBuffer.find(m => m.includes(`Made ${this.username} a server operator`)),
@@ -336,6 +348,15 @@ export class PlayerWrapper {
 
     private async executeAndSync(cmd: string): Promise<void> {
         this.requireServer();
+
+        // A console that answers has already finished the command by the time it replies. The
+        // marker below exists for the stdio console, where output and command completion are
+        // two unrelated streams.
+        if (this.session.console?.output === 'responses') {
+            await this.serverWrapper!.executeAndWait(cmd);
+            return;
+        }
+
         const syncId = `sync_${randomUUID().split('-')[0]}`;
         this.serverWrapper!.execute(cmd);
         this.serverWrapper!.execute(`minecraft:say ${syncId}`);

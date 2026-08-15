@@ -86,6 +86,9 @@ class ExternalEnvironment implements Environment {
             ...BASE_CAPABILITIES,
             console: this._console !== null,
             consoleOutput: this._console?.output ?? 'none',
+            // A reachable console is the ability to run `op`, which is what this capability
+            // claims. Without one there is no way to grant it, hence the false in the base.
+            op: this._console !== null,
         };
 
         console.log(this._console
