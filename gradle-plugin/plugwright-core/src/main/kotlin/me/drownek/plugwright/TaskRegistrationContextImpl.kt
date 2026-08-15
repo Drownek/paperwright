@@ -30,12 +30,23 @@ internal class TaskRegistrationContextImpl(
 
     private val aliasedSuffixes = mutableSetOf<String>()
 
-    override fun <T : Task> register(suffix: String, type: Class<T>, action: T.() -> Unit): TaskProvider<T> {
+    override fun <T : Task> register(suffix: String, type: Class<T>, action: T.() -> Unit): TaskProvider<T> =
+        registerInternal(suffix, type, aliasBare = true, action)
+
+    /**
+     * Same as [register], but never creates the bare `plugwright<Suffix>` alias. Used by core
+     * itself for the "Test" suffix: `plugwrightTest` is claimed by [PlugwrightMatrixTask]
+     * instead, which runs the matrix rather than aliasing to one arbitrary environment.
+     */
+    fun <T : Task> registerWithoutAlias(suffix: String, type: Class<T>, action: T.() -> Unit): TaskProvider<T> =
+        registerInternal(suffix, type, aliasBare = false, action)
+
+    private fun <T : Task> registerInternal(suffix: String, type: Class<T>, aliasBare: Boolean, action: T.() -> Unit): TaskProvider<T> {
         val envSuffix = environmentName.replaceFirstChar { it.uppercaseChar() }
         val taskName = "plugwright$suffix$envSuffix"
         val provider = project.tasks.register(taskName, type) { action() }
 
-        if (isPrimary && aliasedSuffixes.add(suffix)) {
+        if (aliasBare && isPrimary && aliasedSuffixes.add(suffix)) {
             val aliasName = "plugwright$suffix"
             if (project.tasks.findByName(aliasName) == null) {
                 project.tasks.register(aliasName) {

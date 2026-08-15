@@ -14,4 +14,8 @@ export interface TestResult {
     passed: boolean;
     durationMs: number;
     error?: Error;
+    /** Set when the test was never run — a filter excluded it rather than it failing. */
+    skipped?: boolean;
+    /** Human-readable reason shown in reports; required whenever `skipped` is true. */
+    skipReason?: string;
 }

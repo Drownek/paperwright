@@ -1,8 +1,6 @@
 package me.drownek.plugwright
 
 import me.drownek.plugwright.api.ConfigNode
-import me.drownek.plugwright.api.ConfigNodeBuilder
-import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
@@ -56,6 +54,14 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
     @get:OutputFile
     abstract val configFile: RegularFileProperty
 
+    /** Where the runner writes its JSON report (`build/reports/plugwright/<env>.json`). */
+    @get:OutputFile
+    abstract val jsonReportFile: RegularFileProperty
+
+    /** Where the runner writes its JUnit XML report (`build/reports/plugwright/junit/<env>.xml`). */
+    @get:OutputFile
+    abstract val junitReportFile: RegularFileProperty
+
     init {
         group = "verification"
         description = "Run E2E tests for Paper plugin"
@@ -83,52 +89,25 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
         logger.lifecycle("Running E2E tests for environment '${environmentName.get()}'...")
 
         val configDestination = configFile.get().asFile
-        writeRunnerConfig(configDestination, userTestsDirectory)
+        val entry = RunnerLauncher.Entry(
+            environmentName = environmentName.get(),
+            modeId = modeId.get(),
+            environmentConfig = environmentConfig.get(),
+            testsDir = userTestsDirectory,
+            configFile = configDestination,
+            testFiles = with(RunnerLauncher) { testFiles.orNull.splitFilter() },
+            testNames = with(RunnerLauncher) { testNames.orNull.splitFilter() },
+            excludeTests = if (excludeTests.isPresent) excludeTests.get() else emptyList(),
+            jsonReportFile = jsonReportFile.get().asFile,
+            junitReportFile = junitReportFile.get().asFile,
+        )
+        RunnerLauncher.writeConfig(entry)
         logger.lifecycle("Runner config: ${configDestination.absolutePath}")
 
-        val defaultCliJs = File(userTestsDirectory, "node_modules/@drownek/plugwright/dist/cli.js")
-        val cliJsFile = sequenceOf(
-            // Canonical path resolves npm symlink bugs on CI
-            defaultCliJs.canonicalFile,
-            defaultCliJs,
-            // Dev-environment fallback when running inside this repository
-            File(userTestsDirectory, "../../../../runner-package/dist/cli.js")
-        ).firstOrNull { it.exists() }
-            ?: throw GradleException(
-                "plugwright cli.js not found at ${defaultCliJs.absolutePath}. " +
-                    "Did 'npm install' succeed in ${userTestsDirectory.absolutePath}?"
-            )
+        val cliJsFile = RunnerLauncher.resolveCliJs(userTestsDirectory)
 
         runCommand(userTestsDirectory, nodePaths.node, cliJsFile.absolutePath, "--config", configDestination.absolutePath)
 
         logger.lifecycle("E2E tests completed successfully")
     }
-
-    private fun writeRunnerConfig(destination: File, testsDirectory: File) {
-        val fileFilters = testFiles.orNull.splitFilter()
-        val nameFilters = testNames.orNull.splitFilter()
-        val excludeList = if (excludeTests.isPresent) excludeTests.get() else emptyList()
-
-        val root = ConfigNodeBuilder().apply {
-            put("version", RunnerConfigWriter.CONFIG_VERSION)
-            obj("environment") {
-                put("name", environmentName.get())
-                put("mode", modeId.get())
-                put("config", environmentConfig.get())
-            }
-            obj("tests") {
-                put("dir", testsDirectory.absolutePath)
-                if (fileFilters != null) putStrings("include", fileFilters) else putNull("include")
-                if (nameFilters != null) putStrings("names", nameFilters) else putNull("names")
-                if (excludeList.isNotEmpty()) putStrings("exclude", excludeList) else putNull("exclude")
-                // null means "runner default", which TEST_TIMEOUT can still override.
-                putNull("timeoutMs")
-            }
-        }.build()
-
-        RunnerConfigWriter.write(destination, root)
-    }
-
-    private fun String?.splitFilter(): List<String>? =
-        this?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() }
 }

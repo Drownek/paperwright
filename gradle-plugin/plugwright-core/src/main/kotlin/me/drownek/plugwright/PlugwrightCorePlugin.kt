@@ -4,7 +4,9 @@ import me.drownek.plugwright.api.ConfigNodeBuilder
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.TaskProvider
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -82,13 +84,21 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
         val projectPluginJarProvider = resolveProjectPluginJar(project, extension)
         val validationProblems = mutableListOf<String>()
+        val reportsDir = project.layout.buildDirectory.dir("reports/plugwright")
+
+        // -Pplugwright.env=a,b narrows the matrix; ignored by direct plugwrightTest<Env> calls.
+        val matrixEnvFilter = (project.findProperty("plugwright.env") as? String)
+            ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+
+        val matrixEntries = mutableListOf<MatrixEnvironmentInput>()
+        val matrixPrepareTasks = mutableListOf<TaskProvider<out Task>>()
 
         extension.environments.all.forEach { entry ->
             val envName = entry.spec.name
             val mode = entry.mode.erased()
             val ctx = TaskRegistrationContextImpl(project, envName, envName == primaryName, projectPluginJarProvider)
 
-            val testTask = ctx.register("Test", PlugwrightTestTask::class.java) {
+            val testTask = ctx.registerWithoutAlias("Test", PlugwrightTestTask::class.java) {
                 doFirst {
                     if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
                 }
@@ -98,6 +108,8 @@ class PlugwrightCorePlugin : Plugin<Project> {
                 modeId.set(mode.id)
                 excludeTests.set(entry.spec.excludeTests)
                 configFile.set(project.layout.buildDirectory.file("tmp/plugwright/$envName.json"))
+                jsonReportFile.set(reportsDir.map { it.file("$envName.json") })
+                junitReportFile.set(reportsDir.map { it.dir("junit").file("$envName.xml") })
                 nodeVersion.set(extension.nodeVersion)
                 downloadNode.set(extension.downloadNode)
                 nodeInstallDir.set(defaultNodeInstallDir)
@@ -112,17 +124,50 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
             mode.registerTasks(entry.spec, ctx)
 
+            val environmentConfigProvider = ctx.environmentConfigProvider
+                ?: project.provider { ConfigNodeBuilder().apply { mode.serialize(entry.spec, this) }.build() }
+
             testTask.configure {
                 ctx.prepareTaskRef?.let { dependsOn(it) }
-                environmentConfig.set(
-                    ctx.environmentConfigProvider
-                        ?: project.provider { ConfigNodeBuilder().apply { mode.serialize(entry.spec, this) }.build() }
+                environmentConfig.set(environmentConfigProvider)
+            }
+
+            if (entry.spec.includeInMatrix.get() && (matrixEnvFilter == null || envName in matrixEnvFilter)) {
+                val reportsDirFile = reportsDir.get().asFile
+                matrixEntries += MatrixEnvironmentInput(
+                    name = envName,
+                    modeId = mode.id,
+                    allowFailure = entry.spec.allowFailure.get(),
+                    testsDir = extension.testsDir.get().asFile,
+                    configFile = project.layout.buildDirectory.file("tmp/plugwright/$envName.json").get().asFile,
+                    jsonReportFile = File(reportsDirFile, "$envName.json"),
+                    junitReportFile = File(File(reportsDirFile, "junit"), "$envName.xml"),
+                    logFile = File(reportsDirFile, "$envName.log"),
+                    excludeTests = entry.spec.excludeTests.get(),
+                    environmentConfig = environmentConfigProvider,
                 )
+                ctx.prepareTaskRef?.let { matrixPrepareTasks += it }
             }
         }
 
         if (validationProblems.isNotEmpty()) {
             throw GradleException("plugwright configuration problems:\n" + validationProblems.joinToString("\n") { "  $it" })
+        }
+
+        project.tasks.register("plugwrightTest", PlugwrightMatrixTask::class.java) {
+            doFirst {
+                if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
+            }
+            dependsOn(plugwrightCompileTests)
+            matrixPrepareTasks.forEach { dependsOn(it) }
+            entries = matrixEntries
+            parallel.set(extension.matrix.parallel)
+            maxParallel.set(extension.matrix.maxParallel)
+            nodeVersion.set(extension.nodeVersion)
+            downloadNode.set(extension.downloadNode)
+            nodeInstallDir.set(defaultNodeInstallDir)
+            if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
+            if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
         }
     }
 

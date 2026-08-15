@@ -10,7 +10,7 @@ import { ServerWrapper } from './lib/server.js';
 import { testRegistry, scopeStack } from './lib/test-registry.js';
 import { Session } from './lib/session.js';
 import { LocalEnvironment } from './lib/environments/local.js';
-import { formatDuration, printTestSummary } from './lib/reporter.js';
+import { formatDuration, printTestSummary, writeJsonReport, writeJUnitReport } from './lib/reporter.js';
 import { loadRunnerConfig } from './lib/config.js';
 import type { Environment } from './lib/environment.js';
 import type { EnvironmentConfig, LocalEnvironmentConfig, RunnerConfig } from './lib/config.js';
@@ -24,6 +24,7 @@ export { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator };
 export { PlayerWrapper } from './lib/player.js';
 export { ServerWrapper } from './lib/server.js';
 export { test, opTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
+export type { TestOptions } from './lib/test-registry.js';
 export { expect } from './lib/matchers.js';
 export { loadRunnerConfig, resolveSecret, isSecretRef } from './lib/config.js';
 export type { RunnerConfig, EnvironmentConfig, TestsConfig, LocalEnvironmentConfig, SecretRef } from './lib/config.js';
@@ -38,6 +39,16 @@ function resolveEnvironment(cfg: EnvironmentConfig): Environment {
         throw new Error(`Environment "${cfg.name}" uses mode "${cfg.mode}", which this runner cannot run yet.`);
     }
     return new LocalEnvironment(cfg.config as unknown as LocalEnvironmentConfig);
+}
+
+/** Capability keys from `testCase.requires` that `env` does not actually satisfy. A
+ *  value of `false`, `'none'`, or an absent key all count as unmet. */
+function missingCapabilities(env: Environment, required: string[]): string[] {
+    const capabilities = env.capabilities as unknown as Record<string, unknown>;
+    return required.filter(key => {
+        const value = capabilities[key];
+        return value === false || value === 'none' || value === undefined;
+    });
 }
 
 async function findSpecFiles(dir: string): Promise<string[]> {
@@ -55,6 +66,7 @@ async function findSpecFiles(dir: string): Promise<string[]> {
 export async function runTestSession(config: RunnerConfig = loadRunnerConfig()): Promise<void> {
     const testFileFilters = config.tests.include ?? null;
     const testNameFilters = config.tests.names ?? null;
+    const testNameExcludes = config.tests.exclude ?? null;
     const testResults: TestResult[] = [];
 
     const env = resolveEnvironment(config.environment);
@@ -84,6 +96,27 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
 
         console.log(`${pc.bold(`Found ${testFiles.length} test file(s)${testFileFilters ? ` matching filter: ${testFileFilters.join(',')}` : ''}`)}\n`);
 
+        /** Why a test should not run, or null to run it. Checked in order: name exclude,
+         *  name filter, declared `environments`, declared `requires`. A skip always lands
+         *  in the report with its reason — a silent skip on an external stand would look
+         *  like coverage that isn't really there. */
+        function skipReasonFor(testCase: (typeof testRegistry)[number]): string | null {
+            if (testNameExcludes?.some(pattern => testCase.name.includes(pattern))) {
+                return `excluded by tests.exclude (matches "${testNameExcludes.join(',')}")`;
+            }
+            if (testNameFilters && !testNameFilters.some(pattern => testCase.name.includes(pattern))) {
+                return `filtered out by tests.names (${testNameFilters.join(',')})`;
+            }
+            if (testCase.environments && !testCase.environments.includes(config.environment.name)) {
+                return `requires environment in [${testCase.environments.join(', ')}], running "${config.environment.name}"`;
+            }
+            const missing = missingCapabilities(env, testCase.requires);
+            if (missing.length > 0) {
+                return `requires capability [${missing.join(', ')}], unavailable on "${config.environment.name}"`;
+            }
+            return null;
+        }
+
         for (const file of testFiles) {
             console.log(`\n${pc.blue(pc.bold(`Running tests from: ${file}`))}`);
 
@@ -93,12 +126,11 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
             await import(pathToFileURL(file).href);
 
             for (const testCase of testRegistry) {
-                if (testNameFilters) {
-                    const matches = testNameFilters.some(pattern => testCase.name.includes(pattern));
-                    if (!matches) {
-                        console.log(pc.dim(`  Test: ${testCase.name} - SKIPPED (filter: ${testNameFilters.join(',')})`));
-                        continue;
-                    }
+                const skipReason = skipReasonFor(testCase);
+                if (skipReason) {
+                    console.log(pc.dim(`  Test: ${testCase.name} - SKIPPED (${skipReason})`));
+                    testResults.push({ file, testName: testCase.name, passed: true, durationMs: 0, skipped: true, skipReason });
+                    continue;
                 }
 
                 console.log(`  ${pc.bold(`Test: ${testCase.name}`)}`);
@@ -169,6 +201,15 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
     } finally {
         await session.disconnectAllBots();
         await env.teardown();
+
+        if (config.reports?.json) {
+            writeJsonReport(config.reports.json, config.environment.name, testResults);
+            console.log(pc.dim(`JSON report: ${config.reports.json}`));
+        }
+        if (config.reports?.junit) {
+            writeJUnitReport(config.reports.junit, config.environment.name, testResults);
+            console.log(pc.dim(`JUnit report: ${config.reports.junit}`));
+        }
 
         exitCode = printTestSummary(testResults);
 

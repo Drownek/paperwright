@@ -50,6 +50,14 @@ abstract class PlugwrightExtension(project: Project) : LegacyEnvironmentProperti
         environments.action()
     }
 
+    /** Settings for `plugwrightTest`'s multi-environment matrix run. See [matrix]. */
+    val matrix: MatrixSpec = project.objects.newInstance(MatrixSpec::class.java)
+
+    /** Configures the matrix run: `matrix { parallel.set(true); maxParallel.set(2) }`. */
+    fun matrix(action: MatrixSpec.() -> Unit) {
+        matrix.action()
+    }
+
     // ---- Deprecated flat properties --------------------------------------------------
     // Pre-3.0 shape: describes a single implicit "local" environment. Still read whenever
     // the build script has no environments { } block — see PlugwrightMode.applyLegacyDefaults.

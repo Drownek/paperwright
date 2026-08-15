@@ -44,10 +44,18 @@ export interface TestsConfig {
     timeoutMs?: number | null;
 }
 
+export interface ReportsConfig {
+    /** Path to write the machine-readable JSON report to. Omitted means "don't write one". */
+    json?: string | null;
+    /** Path to write the JUnit XML report to. Omitted means "don't write one". */
+    junit?: string | null;
+}
+
 export interface RunnerConfig {
     version: number;
     environment: EnvironmentConfig;
     tests: TestsConfig;
+    reports?: ReportsConfig | null;
 }
 
 /** Settings of the built-in `local` mode, which spawns its own Paper server. */
@@ -110,6 +118,7 @@ function readConfigFile(path: string): RunnerConfig {
     }
 
     parsed.tests = parsed.tests ?? {};
+    parsed.reports = parsed.reports ?? {};
     return parsed;
 }
 
