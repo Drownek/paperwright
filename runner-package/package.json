@@ -5,6 +5,9 @@
   "type": "module",
   "main": "dist/runner.js",
   "types": "dist/runner.d.ts",
+  "bin": {
+    "plugwright": "dist/cli.js"
+  },
   "scripts": {
     "build": "rimraf dist && tsc",
     "prepare": "npm run build",
