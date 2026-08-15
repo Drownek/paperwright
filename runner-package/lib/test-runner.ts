@@ -4,6 +4,7 @@ import { PlayerWrapper } from './player.js';
 import { ServerWrapper } from './server.js';
 import { formatDuration } from './reporter.js';
 import { syntheticAccount } from './account.js';
+import type { Account, AccountPool } from './account.js';
 import type { Session } from './session.js';
 import type { PluginHost } from './plugin-host.js';
 import type { BotConnectionOptions } from './environment.js';
@@ -37,17 +38,38 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
     const server = new ServerWrapper(session);
     const finalizers: Array<() => void | Promise<void>> = [];
 
+    // Accounts leased from `session.env.accounts()` for this test, returned in the `finally`
+    // below regardless of how the test ends.
+    const leasedAccounts: Array<{ account: Account; pool: AccountPool }> = [];
+
     const createPlayer = async (options?: { username?: string }): Promise<PlayerWrapper> => {
-        const uniqueId = randomUUID().split('-')[0];
-        const botUsername = options?.username || `Test_${uniqueId}`;
+        // An explicit username always bypasses the pool: it names a specific bot identity
+        // the test wants, not "give me whatever account is free".
+        const pool = options?.username ? null : session.env.accounts?.() ?? null;
+        let account: Account;
+        if (pool) {
+            account = await pool.lease();
+            leasedAccounts.push({ account, pool });
+        } else {
+            const uniqueId = randomUUID().split('-')[0];
+            account = syntheticAccount(options?.username || `Test_${uniqueId}`);
+        }
+        const botUsername = account.username;
         console.log(`${pc.cyan('[Bot]')} Creating bot: ${pc.bold(botUsername)}`);
 
-        const bot = session.createBot({ ...connOpts, username: botUsername });
+        await session.env.beforeJoin?.();
+
+        const botOptions: BotConnectionOptions = {
+            ...connOpts,
+            auth: account.auth,
+            profilesFolder: account.microsoftCacheDir,
+        };
+        const bot = session.createBot({ ...botOptions, username: botUsername });
         const player = new PlayerWrapper(bot, session);
         player._captureSpawnPromise();
         player.setServerWrapper(server);
-        player._setBotOptions(connOpts);
-        player._setAccount(syntheticAccount(botUsername));
+        player._setBotOptions(botOptions);
+        player._setAccount(account);
 
         await player.join();
         return player;
@@ -121,5 +143,6 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
         return { file, testName: testCase.name, passed: false, durationMs, error: error as Error, plugin: pluginName };
     } finally {
         await session.disconnectAllBots();
+        for (const { account, pool } of leasedAccounts) pool.release(account);
     }
 }

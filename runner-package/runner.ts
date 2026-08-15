@@ -9,19 +9,23 @@ import { Session } from './lib/session.js';
 import { PluginHost } from './lib/plugin-host.js';
 import { runTestCase } from './lib/test-runner.js';
 import { LocalEnvironment } from './lib/environments/local.js';
+import { externalEnvironment } from './lib/environments/external.js';
+import { PlayerWrapper } from './lib/player.js';
 import { printTestSummary, writeJsonReport, writeJUnitReport } from './lib/reporter.js';
 import { loadRunnerConfig } from './lib/config.js';
 import type { Environment } from './lib/environment.js';
 import type { EnvironmentConfig, LocalEnvironmentConfig, RunnerConfig } from './lib/config.js';
+import type { ExternalEnvironmentConfig } from './lib/environments/external.js';
 import type { TestResult } from './lib/types.js';
 import type { TestCase } from './lib/test-registry.js';
+import type { Account, AccountPool } from './lib/account.js';
 
 // Enable source map support for accurate TypeScript stack traces
 installSourceMapSupport();
 
 // Re-export public API
 export { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator };
-export { PlayerWrapper } from './lib/player.js';
+export { PlayerWrapper };
 export { ServerWrapper } from './lib/server.js';
 export { test, opTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
 export type { TestOptions, TestCase } from './lib/test-registry.js';
@@ -35,16 +39,43 @@ export { Session } from './lib/session.js';
 export { PluginHost } from './lib/plugin-host.js';
 export { definePlugin, PLUGIN_API_VERSION } from './lib/plugin.js';
 export type { PlugwrightPlugin, SessionContext, CleanupContext, PluginTestRef, MatcherFn } from './lib/plugin.js';
-export type { Account } from './lib/account.js';
+export { AccountPool } from './lib/account.js';
+export type { Account, AccountsConfig } from './lib/account.js';
+export { AdminBotConsole } from './lib/admin-bot-console.js';
 export { CleanupJournal } from './lib/journal.js';
 export type { JournalEntry } from './lib/journal.js';
+export { externalEnvironment };
+export type { ExternalEnvironmentConfig, ExternalConsoleChannelConfig } from './lib/environments/external.js';
 
-/** Only `local` is wired up yet; third-party modes arrive with the mode registry (phase 3). */
-function resolveEnvironment(cfg: EnvironmentConfig): Environment {
-    if (cfg.mode !== 'local') {
-        throw new Error(`Environment "${cfg.name}" uses mode "${cfg.mode}", which this runner cannot run yet.`);
+/**
+ * `local` and `external` are built into this package; anything else is a third-party mode,
+ * loaded through the `runtime` reference the Gradle plugin wrote into the config.
+ */
+async function resolveEnvironment(cfg: EnvironmentConfig): Promise<Environment> {
+    if (cfg.mode === 'local') {
+        return new LocalEnvironment(cfg.config as unknown as LocalEnvironmentConfig);
     }
-    return new LocalEnvironment(cfg.config as unknown as LocalEnvironmentConfig);
+    if (cfg.mode === 'external') {
+        return externalEnvironment(cfg.config as unknown as ExternalEnvironmentConfig);
+    }
+    if (cfg.runtime) {
+        let mod: any;
+        try {
+            mod = await import(cfg.runtime.package);
+        } catch (error) {
+            throw new Error(
+                `Environment "${cfg.name}" needs package "${cfg.runtime.package}", which failed to load: ` +
+                `${(error as Error).message}`
+            );
+        }
+        const exportName = cfg.runtime.export ?? 'default';
+        const factory = mod[exportName];
+        if (typeof factory !== 'function') {
+            throw new Error(`Package "${cfg.runtime.package}" has no export "${exportName}" for environment "${cfg.name}"`);
+        }
+        return factory(cfg.config) as Environment;
+    }
+    throw new Error(`Environment "${cfg.name}" uses mode "${cfg.mode}", which this runner cannot run yet.`);
 }
 
 /** Capability keys from `testCase.requires` that `env` does not actually satisfy. A
@@ -77,19 +108,21 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         ?? (process.env.TEST_TIMEOUT ? parseInt(process.env.TEST_TIMEOUT, 10) : 30000);
     const testResults: TestResult[] = [];
 
-    const env = resolveEnvironment(config.environment);
+    const env = await resolveEnvironment(config.environment);
     const session = new Session(env, config.journal ?? null);
     const plugins = new PluginHost();
     await plugins.load(config.plugins ?? []);
     // Must happen before the first spec file is imported — see PluginHost.registerMatchers.
     plugins.registerMatchers();
+    // Wired before env.setup(): an environment's own console channel can be a bot that needs
+    // to authenticate during setup() (see AdminBotConsole), which goes through this same hook.
+    session.onPlayerCreate = (player, ctx) => plugins.onPlayerCreate(player, ctx);
 
     let exitCode = 0;
 
     await env.setup(session);
     session.refreshConsole();
     await plugins.setup(session);
-    session.onPlayerCreate = (player, ctx) => plugins.onPlayerCreate(player, ctx);
 
     try {
         const connOpts = env.connection();
@@ -198,3 +231,121 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
 }
 
 export { sleep, poll, waitForAssertion, waitUntil, waitForStable } from './lib/utils.js';
+
+/**
+ * `--ping`: connects to the environment, probes its declared console channel(s), and — if the
+ * environment has an account pool — leases one account and checks that it authenticates. No
+ * spec files run. Exits non-zero (after a readable diagnosis) on any problem, so it's safe to
+ * gate a build on.
+ */
+export async function runPingSession(config: RunnerConfig = loadRunnerConfig()): Promise<void> {
+    console.log(pc.bold(`plugwright ping: environment "${config.environment.name}" (${config.environment.mode})`));
+
+    const env = await resolveEnvironment(config.environment);
+    const session = new Session(env, null);
+    const plugins = new PluginHost();
+    await plugins.load(config.plugins ?? []);
+    plugins.registerMatchers();
+    session.onPlayerCreate = (player, ctx) => plugins.onPlayerCreate(player, ctx);
+
+    const problems: string[] = [];
+    let account: Account | undefined;
+    let pool: AccountPool | null = null;
+
+    try {
+        await env.setup(session);
+        session.refreshConsole();
+        await plugins.setup(session);
+
+        if (env.capabilities.console) {
+            console.log(pc.green(`console: reachable (${session.console?.kind}, output=${session.console?.output})`));
+        } else {
+            console.log(pc.yellow('console: unavailable'));
+            problems.push('no console channel could be reached');
+        }
+
+        pool = env.accounts?.() ?? null;
+        if (pool) {
+            try {
+                account = await pool.lease();
+                await env.beforeJoin?.();
+                const connOpts = env.connection();
+                const bot = session.createBot({ ...connOpts, auth: account.auth, username: account.username });
+                const player = new PlayerWrapper(bot, session);
+                player._captureSpawnPromise();
+                player._setBotOptions({ ...connOpts, auth: account.auth });
+                player._setAccount(account);
+                await player.join();
+                console.log(pc.green(`auth: "${account.username}" connected and authenticated`));
+                await session.disconnectBot(bot, account.username);
+                session.removeBot(bot);
+            } catch (error) {
+                problems.push(`auth check failed: ${(error as Error).message}`);
+            }
+        } else {
+            console.log(pc.dim('auth: no account pool configured for this environment, skipped'));
+        }
+    } catch (error) {
+        problems.push((error as Error).message);
+    } finally {
+        if (account && pool) pool.release(account);
+        await plugins.teardown();
+        await session.disconnectAllBots();
+        await env.teardown();
+    }
+
+    let exitCode = 0;
+    if (problems.length > 0) {
+        console.log(pc.red('\nplugwrightPing failed:'));
+        for (const problem of problems) console.log(pc.red(`  - ${problem}`));
+        exitCode = 1;
+    } else {
+        console.log(pc.green('\nplugwrightPing: environment is reachable'));
+    }
+
+    setTimeout(() => process.exit(exitCode), 500).unref();
+}
+
+/**
+ * `--cleanup`: runs every loaded plugin's `cleanup({ scope: 'manual' })` handler and reports
+ * what the crash-recovery journal still has outstanding afterward. Replaying journal entries
+ * is the plugin's job — it owns what a typed entry means — this only gives it the chance.
+ */
+export async function runCleanupSession(config: RunnerConfig = loadRunnerConfig()): Promise<void> {
+    console.log(pc.bold(`plugwright cleanup: environment "${config.environment.name}"`));
+
+    const env = await resolveEnvironment(config.environment);
+    const session = new Session(env, config.journal ?? null);
+    const plugins = new PluginHost();
+    await plugins.load(config.plugins ?? []);
+    plugins.registerMatchers();
+
+    let exitCode = 0;
+    try {
+        const outstandingBefore = session.journal.outstanding();
+        console.log(pc.dim(`journal: ${outstandingBefore.length} outstanding entr${outstandingBefore.length === 1 ? 'y' : 'ies'}`));
+
+        await env.setup(session);
+        session.refreshConsole();
+        await plugins.setup(session);
+
+        await plugins.runCleanup(session, 'manual');
+
+        const outstandingAfter = session.journal.outstanding();
+        if (outstandingAfter.length > 0) {
+            console.log(pc.yellow(`journal: ${outstandingAfter.length} entr${outstandingAfter.length === 1 ? 'y' : 'ies'} still outstanding after cleanup`));
+            for (const entry of outstandingAfter) console.log(pc.yellow(`  - ${JSON.stringify(entry)}`));
+        } else {
+            console.log(pc.green('journal: clean'));
+        }
+    } catch (error) {
+        console.error(pc.red(`cleanup failed: ${(error as Error).message}`));
+        exitCode = 1;
+    } finally {
+        await plugins.teardown();
+        await session.disconnectAllBots();
+        await env.teardown();
+    }
+
+    setTimeout(() => process.exit(exitCode), 500).unref();
+}
