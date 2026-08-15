@@ -3,12 +3,8 @@ package me.drownek.plugwright
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.jvm.toolchain.JavaToolchainService
-import org.gradle.plugins.ide.idea.model.IdeaModel
-import org.jetbrains.gradle.ext.ProjectSettings
-import org.jetbrains.gradle.ext.TaskTriggersConfig
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -23,65 +19,11 @@ object BannerState {
     val printed = AtomicBoolean(false)
 }
 
-private fun runNpmInstall(project: Project, targetDir: File, nodePaths: NodeManager.NodePaths) {
-    val isWin = System.getProperty("os.name").lowercase().contains("windows")
-    val cmd = if (isWin) listOf("cmd", "/c", nodePaths.npm, "install") else listOf(nodePaths.npm, "install")
-    val nodeDir = File(nodePaths.node).parent
-
-    val execOps = project.objects.newInstance(InjectedExecOps::class.java)
-    val execResult = execOps.execOperations.exec {
-        workingDir = targetDir
-        commandLine = cmd
-        if (nodeDir != null) {
-            val pathKey = environment.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
-            environment[pathKey] = nodeDir + File.pathSeparator + (environment[pathKey] ?: "")
-        }
-        isIgnoreExitValue = true
-    }
-
-    if (execResult.exitValue != 0) {
-        throw GradleException("EXEC ERROR: 'npm install' failed with exit code ${execResult.exitValue}.")
-    }
-    project.logger.lifecycle("Dependencies installed successfully.")
-}
-
-private fun AbstractPlugwrightTask.configureCommon(project: Project, extension: PlugwrightExtension, defaultNodeInstallDir: File) {
-    doFirst {
-        if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
-    }
-
-    minecraftVersion.set(extension.minecraftVersion)
-    jvmArgs.set(extension.jvmArgs)
-    acceptEula.set(extension.acceptEula)
-    pluginUrls.set(extension.pluginUrls)
-    runDirFiles.set(extension.runDirFiles)
-    nodeVersion.set(extension.nodeVersion)
-    downloadNode.set(extension.downloadNode)
-    nodeInstallDir.set(defaultNodeInstallDir)
-
-    serverJarPath.set(
-        extension.runDir.map { runDir ->
-            val serverJar = runDir.asFile.resolve("server.jar")
-            serverJar.absolutePath
-        }
-    )
-
-    serverDir.set(
-        extension.runDir.map { runDir ->
-            runDir.asFile.absolutePath
-        }
-    )
-
-    // Configure Java Toolchain if Java plugin is present
-    project.plugins.withId("java") {
-        val javaExtension = project.extensions.findByType(JavaPluginExtension::class.java)
-        val javaToolchains = project.extensions.findByType(JavaToolchainService::class.java)
-
-        if (javaExtension != null && javaToolchains != null) {
-            javaLauncher.set(javaToolchains.launcherFor(javaExtension.toolchain))
-        }
-    }
-}
+/**
+ * Name of the implicit environment used while the build script has no `environments { }`
+ * block: the flat extension properties describe one local server.
+ */
+const val DEFAULT_ENVIRONMENT_NAME = "local"
 
 class PlugwrightPlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -142,46 +84,38 @@ class PlugwrightPlugin : Plugin<Project> {
             }
         }
 
-        val plugwrightNpmInstall = project.tasks.register("plugwrightNpmInstall") {
-            group = "verification"
-            description = "Installs Node.js dependencies for Plugwright tests."
-            
+        val plugwrightCompileTests = project.tasks.register("plugwrightCompileTests", PlugwrightCompileTestsTask::class.java) {
             doFirst {
                 if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
             }
-            
-            // Define inputs and outputs for up-to-date checks
-            inputs.file(extension.testsDir.map { it.file("package.json") }).optional()
-            inputs.file(extension.testsDir.map { it.file("package-lock.json") }).optional()
-            outputs.dir(extension.testsDir.map { it.dir("node_modules") })
-            outputs.upToDateWhen { File(extension.testsDir.get().asFile, "package.json").exists() }
-            
-            doLast {
-                val testsDir = extension.testsDir.get().asFile
-                if (!testsDir.exists() || !File(testsDir, "package.json").exists()) {
-                    throw GradleException("Cannot run plugwrightNpmInstall: 'package.json' not found in ${testsDir.absolutePath}. Please run 'plugwrightInit' first.")
-                }
 
-                val nodePaths = NodeManager.getOrDownloadNode(defaultNodeInstallDir, extension.nodeVersion.get(), extension.downloadNode.get())
-                project.logger.lifecycle("Installing Node.js dependencies in ${testsDir.absolutePath}...")
-
-                try {
-                    runNpmInstall(project, testsDir, nodePaths)
-                } catch (e: Exception) {
-                    if (e is GradleException) throw e
-                    throw GradleException("EXEC FATAL: Failed to launch npm process. Original error: ${e.message}", e)
-                }
-            }
+            testsDir.set(extension.testsDir)
+            nodeVersion.set(extension.nodeVersion)
+            downloadNode.set(extension.downloadNode)
+            nodeInstallDir.set(defaultNodeInstallDir)
         }
 
         project.tasks.register("plugwrightTest", PlugwrightTestTask::class.java) {
-            // Ensure clean and setup runs before test
+            // Ensure clean runs before test
             dependsOn(plugwrightClean)
-            dependsOn(plugwrightNpmInstall)
+            // npm install + tsc are shared across environments, so they live in their own task
+            dependsOn(plugwrightCompileTests)
 
-            configureCommon(project, extension, defaultNodeInstallDir)
+            doFirst {
+                if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
+            }
 
             testsDir.set(extension.testsDir)
+            environmentName.set(DEFAULT_ENVIRONMENT_NAME)
+            configFile.set(project.layout.buildDirectory.file("tmp/plugwright/$DEFAULT_ENVIRONMENT_NAME.json"))
+            minecraftVersion.set(extension.minecraftVersion)
+            jvmArgs.set(extension.jvmArgs)
+            acceptEula.set(extension.acceptEula)
+            pluginUrls.set(extension.pluginUrls)
+            runDirFiles.set(extension.runDirFiles)
+            nodeVersion.set(extension.nodeVersion)
+            downloadNode.set(extension.downloadNode)
+            nodeInstallDir.set(defaultNodeInstallDir)
 
             // Support command line properties for filtering
             if (project.hasProperty("testFiles")) {
@@ -191,19 +125,76 @@ class PlugwrightPlugin : Plugin<Project> {
             if (project.hasProperty("testNames")) {
                 testNames.set(project.property("testNames") as String)
             }
+
+            serverJarPath.set(
+                extension.runDir.map { runDir ->
+                    val serverJar = runDir.asFile.resolve("server.jar")
+                    serverJar.absolutePath
+                }
+            )
+
+            serverDir.set(
+                extension.runDir.map { runDir ->
+                    runDir.asFile.absolutePath
+                }
+            )
+
+            // Configure Java Toolchain if Java plugin is present
+            project.plugins.withId("java") {
+                val javaExtension = project.extensions.findByType(JavaPluginExtension::class.java)
+                val javaToolchains = project.extensions.findByType(JavaToolchainService::class.java)
+
+                if (javaExtension != null && javaToolchains != null) {
+                    javaLauncher.set(javaToolchains.launcherFor(javaExtension.toolchain))
+                }
+            }
         }
 
         project.tasks.register("plugwrightRunServer", PlugwrightRunTask::class.java) {
             // Ensure clean runs before starting the server
             dependsOn(plugwrightClean)
 
-            configureCommon(project, extension, defaultNodeInstallDir)
+            doFirst {
+                if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
+            }
+
+            minecraftVersion.set(extension.minecraftVersion)
+            jvmArgs.set(extension.jvmArgs)
+            acceptEula.set(extension.acceptEula)
+            pluginUrls.set(extension.pluginUrls)
+            runDirFiles.set(extension.runDirFiles)
+            nodeVersion.set(extension.nodeVersion)
+            downloadNode.set(extension.downloadNode)
+            nodeInstallDir.set(defaultNodeInstallDir)
+
+            serverJarPath.set(
+                extension.runDir.map { runDir ->
+                    val serverJar = runDir.asFile.resolve("server.jar")
+                    serverJar.absolutePath
+                }
+            )
+
+            serverDir.set(
+                extension.runDir.map { runDir ->
+                    runDir.asFile.absolutePath
+                }
+            )
+
+            // Configure Java Toolchain if Java plugin is present
+            project.plugins.withId("java") {
+                val javaExtension = project.extensions.findByType(JavaPluginExtension::class.java)
+                val javaToolchains = project.extensions.findByType(JavaToolchainService::class.java)
+
+                if (javaExtension != null && javaToolchains != null) {
+                    javaLauncher.set(javaToolchains.launcherFor(javaExtension.toolchain))
+                }
+            }
         }
 
         project.tasks.register("plugwrightInit") {
             group = "verification"
             description = "Interactively initializes a plugwright-test environment with required configs and an initial test file."
-
+            
             doFirst {
                 if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
             }
@@ -311,7 +302,25 @@ class PlugwrightPlugin : Plugin<Project> {
                 val nodePaths = NodeManager.getOrDownloadNode(defaultNodeInstallDir, extension.nodeVersion.get(), extension.downloadNode.get())
 
                 try {
-                    runNpmInstall(project, targetDir, nodePaths)
+                    val isWin = System.getProperty("os.name").lowercase().contains("windows")
+                    val cmd = if (isWin) listOf("cmd", "/c", nodePaths.npm, "install") else listOf(nodePaths.npm, "install")
+                    val nodeDir = File(nodePaths.node).parent
+
+                    val execOps = project.objects.newInstance(InjectedExecOps::class.java)
+                    val execResult = execOps.execOperations.exec {
+                        workingDir = targetDir
+                        commandLine = cmd
+                        if (nodeDir != null) {
+                            val pathKey = environment.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
+                            environment[pathKey] = nodeDir + File.pathSeparator + (environment[pathKey] ?: "")
+                        }
+                        isIgnoreExitValue = true
+                    }
+
+                    if (execResult.exitValue != 0) {
+                        throw GradleException("EXEC ERROR: 'npm install' failed with exit code ${execResult.exitValue}.")
+                    }
+                    project.logger.lifecycle("Dependencies installed successfully.")
                     project.logger.lifecycle("\nYou're all set! Run tests with: ./gradlew plugwrightTest")
                 } catch (e: Exception) {
                     if (e is GradleException) throw e
@@ -337,20 +346,6 @@ class PlugwrightPlugin : Plugin<Project> {
                     project.tasks.named("plugwrightRunServer", PlugwrightRunTask::class.java).configure {
                         pluginJar.set(jarTask.map { it.outputs.files.singleFile })
                     }
-                }
-            }
-        }
-
-        // Auto-trigger npm install on IntelliJ IDEA sync if IDEA plugin is applied
-        project.plugins.withId("idea") {
-            project.pluginManager.apply("org.jetbrains.gradle.plugin.idea-ext")
-            project.afterEvaluate {
-                val ideaModel = project.extensions.findByType(IdeaModel::class.java)
-                if (ideaModel != null) {
-                    val ideaProject = ideaModel.project as? ExtensionAware
-                    val settings = ideaProject?.extensions?.findByType(ProjectSettings::class.java) as? ExtensionAware
-                    val triggers = settings?.extensions?.findByType(TaskTriggersConfig::class.java)
-                    triggers?.afterSync(plugwrightNpmInstall)
                 }
             }
         }

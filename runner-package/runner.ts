@@ -11,6 +11,8 @@ import { ServerWrapper } from './lib/server.js';
 import { testRegistry, scopeStack } from './lib/test-registry.js';
 import { serverConsoleBuffer, createBot, disconnectAllBots, writeMcOutput } from './lib/bot-utils.js';
 import { formatDuration, printTestSummary } from './lib/reporter.js';
+import { loadRunnerConfig } from './lib/config.js';
+import type { LocalEnvironmentConfig, RunnerConfig } from './lib/config.js';
 import type { TestResult } from './lib/types.js';
 
 // Enable source map support for accurate TypeScript stack traces
@@ -22,6 +24,8 @@ export { PlayerWrapper } from './lib/player.js';
 export { ServerWrapper } from './lib/server.js';
 export { test, opTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
 export { expect } from './lib/matchers.js';
+export { loadRunnerConfig, resolveSecret, isSecretRef } from './lib/config.js';
+export type { RunnerConfig, EnvironmentConfig, TestsConfig, LocalEnvironmentConfig, SecretRef } from './lib/config.js';
 export type { TestContext } from './lib/types.js';
 
 async function waitForServerStart(serverProcess: ChildProcessWithoutNullStreams): Promise<void> {
@@ -75,28 +79,34 @@ async function findSpecFiles(dir: string): Promise<string[]> {
     return results;
 }
 
-export async function runTestSession(): Promise<void> {
-    const serverJar = process.env.SERVER_JAR;
-    const serverDir = process.env.SERVER_DIR;
-    const javaPath = process.env.JAVA_PATH;
-    const testFileFilter = process.env.TEST_FILES;
-    const testNameFilter = process.env.TEST_NAMES;
+export async function runTestSession(config: RunnerConfig = loadRunnerConfig()): Promise<void> {
+    const { mode, name: environmentName } = config.environment;
+    if (mode !== 'local') {
+        throw new Error(`Environment "${environmentName}" uses mode "${mode}", which this runner cannot run yet.`);
+    }
+
+    const env = config.environment.config as unknown as LocalEnvironmentConfig;
+    const { serverJar, serverDir, javaPath } = env;
+    const mcVersion = env.minecraftVersion ?? undefined;
+    const host = env.host ?? 'localhost';
+    const port = env.port ?? 25565;
+    const testFileFilters = config.tests.include ?? null;
+    const testNameFilters = config.tests.names ?? null;
     const testResults: TestResult[] = [];
 
     if (!serverJar || !serverDir || !javaPath) {
-        throw new Error('SERVER_JAR, JAVA_PATH and SERVER_DIR environment variables must be set');
+        throw new Error('Environment config must provide serverJar, serverDir and javaPath');
     }
 
     let exitCode = 0;
 
     console.log(`${pc.bold('Starting Paper server...')}`);
 
-    const jvmArgsString = process.env.JVM_ARGS || '';
-    const jvmArgs = jvmArgsString.split(' ').filter(arg => arg.trim() !== '');
+    const jvmArgs = env.jvmArgs ?? [];
 
     console.log(pc.dim(`JVM Arguments: ${jvmArgs.join(' ')}`));
 
-    const serverProcess = spawn(javaPath!, [...jvmArgs, '-jar', serverJar, '--nogui'], {
+    const serverProcess = spawn(javaPath, [...jvmArgs, '-jar', serverJar, '--nogui'], {
         cwd: serverDir,
         stdio: ['pipe', 'pipe', 'pipe']
     });
@@ -156,9 +166,9 @@ export async function runTestSession(): Promise<void> {
         serverProcess.stdout.on('data', writeMcOutput);
         serverProcess.stderr.on('data', writeMcOutput);
 
-        let testFiles = await findSpecFiles(process.cwd());
-        if (testFileFilter) {
-            const patterns = testFileFilter.split(',').map(p => p.trim());
+        let testFiles = await findSpecFiles(config.tests.dir || process.cwd());
+        if (testFileFilters) {
+            const patterns = testFileFilters;
             console.log(`${pc.dim(`Filtering test files with patterns: ${JSON.stringify(patterns)}`)}\n`);
             testFiles = testFiles.filter(file =>
                 patterns.some(pattern => {
@@ -170,7 +180,7 @@ export async function runTestSession(): Promise<void> {
             );
         }
 
-        console.log(`${pc.bold(`Found ${testFiles.length} test file(s)${testFileFilter ? ` matching filter: ${testFileFilter}` : ''}`)}\n`);
+        console.log(`${pc.bold(`Found ${testFiles.length} test file(s)${testFileFilters ? ` matching filter: ${testFileFilters.join(',')}` : ''}`)}\n`);
 
         for (const file of testFiles) {
             console.log(`\n${pc.blue(pc.bold(`Running tests from: ${file}`))}`);
@@ -181,11 +191,10 @@ export async function runTestSession(): Promise<void> {
             await import(pathToFileURL(file).href);
 
             for (const testCase of testRegistry) {
-                if (testNameFilter) {
-                    const patterns = testNameFilter.split(',').map(p => p.trim());
-                    const matches = patterns.some(pattern => testCase.name.includes(pattern));
+                if (testNameFilters) {
+                    const matches = testNameFilters.some(pattern => testCase.name.includes(pattern));
                     if (!matches) {
-                        console.log(pc.dim(`  Test: ${testCase.name} - SKIPPED (filter: ${testNameFilter})`));
+                        console.log(pc.dim(`  Test: ${testCase.name} - SKIPPED (filter: ${testNameFilters.join(',')})`));
                         continue;
                     }
                 }
@@ -207,10 +216,10 @@ export async function runTestSession(): Promise<void> {
                     console.log(`${pc.cyan('[Bot]')} Creating bot: ${pc.bold(botUsername)}`);
 
                     const bot = createBot({
-                        host: 'localhost',
-                        port: 25565,
+                        host,
+                        port,
                         username: botUsername,
-                        version: process.env.MC_VERSION,
+                        version: mcVersion,
                         auth: 'offline',
                     });
 
@@ -218,9 +227,9 @@ export async function runTestSession(): Promise<void> {
                     player._captureSpawnPromise();
                     player.setServerWrapper(server);
                     player._setBotOptions({
-                        host: 'localhost',
-                        port: 25565,
-                        version: process.env.MC_VERSION,
+                        host,
+                        port,
+                        version: mcVersion,
                         auth: 'offline',
                     });
 
@@ -234,7 +243,8 @@ export async function runTestSession(): Promise<void> {
 
                 try {
                     const abortController = new AbortController();
-                    const timeoutMs = process.env.TEST_TIMEOUT ? parseInt(process.env.TEST_TIMEOUT, 10) : 30000;
+                    const timeoutMs = config.tests.timeoutMs
+                        ?? (process.env.TEST_TIMEOUT ? parseInt(process.env.TEST_TIMEOUT, 10) : 30000);
                     let timeoutHandle: ReturnType<typeof setTimeout>;
                     const timeoutPromise = new Promise<never>((_, reject) => {
                         timeoutHandle = setTimeout(() => {
