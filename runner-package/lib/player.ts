@@ -114,14 +114,42 @@ export class PlayerWrapper {
             this._captureSpawnPromise(timeout);
         }
 
-        await this._spawnPromise;
-        this._spawnPromise = null;
-
+        // Listeners go up before the first await: a login wall greets the bot as soon as it
+        // enters the play state, and a prompt that arrives before the message buffer exists
+        // is a prompt no authentication plugin can answer.
         this._registerPersistentListeners();
 
         if (this.account) {
+            // Authentication has to happen while the server still holds the player: AuthMe and
+            // friends keep an unauthenticated bot out of the world entirely, so waiting for the
+            // spawn first would wait for something login is the precondition of.
+            await Promise.race([this._spawnPromise, this._waitForLogin(timeout)]);
             await this.session.onPlayerCreate?.(this, { account: this.account, env: this.session.env });
         }
+
+        await this._spawnPromise;
+        this._spawnPromise = null;
+    }
+
+    /** Resolves once the client is in the play state, where chat works and the server's login
+     *  prompt has been delivered. Never rejects on its own — it is raced against the spawn
+     *  promise, which already fails on a kick, an error or a timeout. */
+    private _waitForLogin(timeout: number): Promise<void> {
+        if (this.bot.entity) return Promise.resolve();
+
+        return new Promise<void>((resolve) => {
+            const timer = setTimeout(() => {
+                this.bot.removeListener('login', onLogin);
+                resolve();
+            }, timeout);
+
+            const onLogin = (): void => {
+                clearTimeout(timer);
+                resolve();
+            };
+
+            this.bot.once('login', onLogin);
+        });
     }
 
     /** @internal */
