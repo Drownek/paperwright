@@ -190,6 +190,13 @@ class PlugwrightCorePlugin : Plugin<Project> {
             val pluginConfigsProvider = ctx.pluginConfigsProvider
                 ?: project.provider { emptyList() }
 
+            // A plugin declared by npm name is installed alongside the environment's own
+            // runner packages; a plugin given as a path is already in the project.
+            pluginConfigsProvider.get()
+                .map { it.specifier }
+                .filter { isNpmPackageName(it) }
+                .forEach { runnerPackageSpecs += it }
+
             testTask.configure {
                 ctx.prepareTaskRef?.let { dependsOn(it) }
                 environmentConfig.set(environmentConfigProvider)
@@ -237,6 +244,14 @@ class PlugwrightCorePlugin : Plugin<Project> {
             if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
             if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
         }
+    }
+
+    /** Whether a plugin specifier names an npm package rather than a file in the project.
+     *  Paths are what `plugins { local(file(...)) }` produces; everything else is installable. */
+    private fun isNpmPackageName(specifier: String): Boolean {
+        if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("\\")) return false
+        if (specifier.length > 1 && specifier[1] == ':') return false
+        return true
     }
 
     /** The jar of the plugin under test, from `shadowJar` / `reobfJar` / `jar`. Absent when

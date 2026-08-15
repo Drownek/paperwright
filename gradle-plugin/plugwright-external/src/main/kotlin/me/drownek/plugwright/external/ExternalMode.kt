@@ -117,7 +117,7 @@ object ExternalMode : PlugwrightMode<ExternalEnvironmentSpec> {
         val project = ctx.project
         val envName = spec.name
 
-        ctx.pluginConfigs(project.provider { spec.pluginsSpec.entries.toList() })
+        ctx.pluginConfigs(project.provider { spec.pluginsSpec.refs() })
         val configProvider = project.provider { ConfigNodeBuilder().also { serialize(spec, it) }.build() }
         val journalFile = project.layout.buildDirectory.file("plugwright/$envName-journal.jsonl")
 

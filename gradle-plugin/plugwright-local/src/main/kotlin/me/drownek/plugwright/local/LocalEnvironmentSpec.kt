@@ -1,6 +1,7 @@
 package me.drownek.plugwright.local
 
 import me.drownek.plugwright.api.EnvironmentSpec
+import me.drownek.plugwright.api.PluginsSpec
 import me.drownek.plugwright.api.RunDirFile
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.model.ObjectFactory
@@ -46,6 +47,17 @@ class LocalEnvironmentSpec(private val environmentName: String, objects: ObjectF
 
     /** When true, the plugin under test is not built or installed automatically. */
     val useExternalPluginsOnly: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+
+    internal val pluginsSpec: PluginsSpec = PluginsSpec()
+
+    /**
+     * `plugins { npm("@plugwright/auth-authme"); local(file("...")) }` — runner plugins loaded
+     * for this environment. A locally spawned server still needs them whenever it runs a
+     * plugin that changes what a connecting bot has to do, authentication being the usual case.
+     */
+    fun plugins(action: PluginsSpec.() -> Unit) {
+        pluginsSpec.action()
+    }
 
     /**
      * DSL method for configuring plugin downloads.
