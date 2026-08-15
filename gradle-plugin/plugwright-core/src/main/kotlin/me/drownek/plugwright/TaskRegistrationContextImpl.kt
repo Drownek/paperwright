@@ -1,6 +1,7 @@
 package me.drownek.plugwright
 
 import me.drownek.plugwright.api.ConfigNode
+import me.drownek.plugwright.api.PluginRef
 import me.drownek.plugwright.api.TaskRegistrationContext
 import org.gradle.api.Project
 import org.gradle.api.Task
@@ -17,7 +18,8 @@ internal class TaskRegistrationContextImpl(
     override val project: Project,
     override val environmentName: String,
     private val isPrimary: Boolean,
-    override val projectPluginJar: Provider<File>
+    override val projectPluginJar: Provider<File>,
+    override val testsDir: Provider<File>
 ) : TaskRegistrationContext {
 
     /** Set by [prepareTask]; read by the plugin once every mode has registered its tasks. */
@@ -26,6 +28,10 @@ internal class TaskRegistrationContextImpl(
 
     /** Set by [environmentConfig]; when null, the plugin falls back to [me.drownek.plugwright.api.PlugwrightMode.serialize]. */
     var environmentConfigProvider: Provider<ConfigNode>? = null
+        private set
+
+    /** Set by [pluginConfigs]; when null, the environment loads no runner plugins. */
+    var pluginConfigsProvider: Provider<List<PluginRef>>? = null
         private set
 
     private val aliasedSuffixes = mutableSetOf<String>()
@@ -65,5 +71,9 @@ internal class TaskRegistrationContextImpl(
 
     override fun environmentConfig(node: Provider<ConfigNode>) {
         environmentConfigProvider = node
+    }
+
+    override fun pluginConfigs(refs: Provider<List<PluginRef>>) {
+        pluginConfigsProvider = refs
     }
 }

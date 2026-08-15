@@ -29,6 +29,9 @@ interface TaskRegistrationContext {
      */
     val projectPluginJar: Provider<File>
 
+    /** Directory the runner scans for spec files, same value `plugwrightTest<Environment>` uses. */
+    val testsDir: Provider<File>
+
     /**
      * Registers a task named `plugwright<Suffix><Environment>`, e.g. `plugwrightProvisionLocal`
      * for `register("Provision", …)` in the `local` environment.
@@ -49,6 +52,13 @@ interface TaskRegistrationContext {
      * task can reach — a Gradle service such as the Java toolchain, for instance.
      */
     fun environmentConfig(node: Provider<ConfigNode>)
+
+    /**
+     * Declares the runner plugins this environment should load — the top-level `plugins`
+     * array in the config, sibling to `environment.config` rather than part of it. Empty by
+     * default; most modes have none.
+     */
+    fun pluginConfigs(refs: Provider<List<PluginRef>>)
 }
 
 /** Kotlin-friendly overload of [TaskRegistrationContext.register]. */

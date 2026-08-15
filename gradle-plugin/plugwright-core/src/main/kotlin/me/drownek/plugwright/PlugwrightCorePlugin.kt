@@ -96,7 +96,11 @@ class PlugwrightCorePlugin : Plugin<Project> {
         extension.environments.all.forEach { entry ->
             val envName = entry.spec.name
             val mode = entry.mode.erased()
-            val ctx = TaskRegistrationContextImpl(project, envName, envName == primaryName, projectPluginJarProvider)
+            val ctx = TaskRegistrationContextImpl(
+                project, envName, envName == primaryName, projectPluginJarProvider,
+                extension.testsDir.map { it.asFile }
+            )
+            val journalFilePath = project.layout.buildDirectory.file("plugwright/$envName-journal.jsonl").get().asFile
 
             val testTask = ctx.registerWithoutAlias("Test", PlugwrightTestTask::class.java) {
                 doFirst {
@@ -110,6 +114,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
                 configFile.set(project.layout.buildDirectory.file("tmp/plugwright/$envName.json"))
                 jsonReportFile.set(reportsDir.map { it.file("$envName.json") })
                 junitReportFile.set(reportsDir.map { it.dir("junit").file("$envName.xml") })
+                journalFile.set(journalFilePath)
                 nodeVersion.set(extension.nodeVersion)
                 downloadNode.set(extension.downloadNode)
                 nodeInstallDir.set(defaultNodeInstallDir)
@@ -126,10 +131,13 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
             val environmentConfigProvider = ctx.environmentConfigProvider
                 ?: project.provider { ConfigNodeBuilder().apply { mode.serialize(entry.spec, this) }.build() }
+            val pluginConfigsProvider = ctx.pluginConfigsProvider
+                ?: project.provider { emptyList() }
 
             testTask.configure {
                 ctx.prepareTaskRef?.let { dependsOn(it) }
                 environmentConfig.set(environmentConfigProvider)
+                pluginConfigs.set(pluginConfigsProvider)
             }
 
             if (entry.spec.includeInMatrix.get() && (matrixEnvFilter == null || envName in matrixEnvFilter)) {
@@ -145,6 +153,8 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     logFile = File(reportsDirFile, "$envName.log"),
                     excludeTests = entry.spec.excludeTests.get(),
                     environmentConfig = environmentConfigProvider,
+                    pluginConfigs = pluginConfigsProvider,
+                    journalFile = journalFilePath,
                 )
                 ctx.prepareTaskRef?.let { matrixPrepareTasks += it }
             }

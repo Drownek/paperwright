@@ -1,6 +1,7 @@
 package me.drownek.plugwright
 
 import me.drownek.plugwright.api.ConfigNode
+import me.drownek.plugwright.api.PluginRef
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
@@ -49,6 +50,14 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
      */
     @get:Internal
     abstract val environmentConfig: Property<ConfigNode>
+
+    /** Runner plugins this environment loads, from [me.drownek.plugwright.api.TaskRegistrationContext.pluginConfigs]. */
+    @get:Internal
+    abstract val pluginConfigs: ListProperty<PluginRef>
+
+    /** Crash-recovery journal for this environment's run. */
+    @get:Internal
+    abstract val journalFile: RegularFileProperty
 
     /** Where the generated runner config is written before the CLI is invoked. */
     @get:OutputFile
@@ -100,6 +109,8 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
             excludeTests = if (excludeTests.isPresent) excludeTests.get() else emptyList(),
             jsonReportFile = jsonReportFile.get().asFile,
             junitReportFile = junitReportFile.get().asFile,
+            pluginConfigs = pluginConfigs.get(),
+            journalFile = journalFile.orNull?.asFile,
         )
         RunnerLauncher.writeConfig(entry)
         logger.lifecycle("Runner config: ${configDestination.absolutePath}")

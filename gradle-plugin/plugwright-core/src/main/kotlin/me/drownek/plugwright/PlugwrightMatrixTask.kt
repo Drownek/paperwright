@@ -2,6 +2,7 @@ package me.drownek.plugwright
 
 import com.google.gson.JsonParser
 import me.drownek.plugwright.api.ConfigNode
+import me.drownek.plugwright.api.PluginRef
 import org.gradle.api.GradleException
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
@@ -25,6 +26,8 @@ internal data class MatrixEnvironmentInput(
     val logFile: File,
     val excludeTests: List<String>,
     val environmentConfig: Provider<ConfigNode>,
+    val pluginConfigs: Provider<List<PluginRef>>,
+    val journalFile: File?,
 )
 
 private data class EnvironmentSummary(val total: Int, val passed: Int, val failed: Int, val skipped: Int, val durationMs: Long)
@@ -119,6 +122,8 @@ abstract class PlugwrightMatrixTask : AbstractNodeTask() {
                 excludeTests = env.excludeTests,
                 jsonReportFile = env.jsonReportFile,
                 junitReportFile = env.junitReportFile,
+                pluginConfigs = env.pluginConfigs.get(),
+                journalFile = env.journalFile,
             )
             RunnerLauncher.writeConfig(entry)
             val cliJs = RunnerLauncher.resolveCliJs(env.testsDir)

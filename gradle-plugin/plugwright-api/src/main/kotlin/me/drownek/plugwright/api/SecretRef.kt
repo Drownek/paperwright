@@ -1,5 +1,6 @@
 package me.drownek.plugwright.api
 
+import org.gradle.api.Project
 import java.io.File
 import java.io.Serializable
 
@@ -37,3 +38,7 @@ object Secrets {
     fun file(file: File): SecretRef = SecretRef.FromFile(file)
     fun systemProperty(name: String): SecretRef = SecretRef.FromSystemProperty(name)
 }
+
+/** `secret.env("X")` / `secret.file(path)` in a build script, anywhere the implicit `Project`
+ *  receiver is reachable — including nested `environments { create(...) { ... } }` blocks. */
+val Project.secret: Secrets get() = Secrets
