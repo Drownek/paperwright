@@ -1,9 +1,31 @@
-package me.drownek.plugwright
+package me.drownek.plugwright.local
 
-import org.gradle.api.tasks.TaskAction
+import me.drownek.plugwright.AbstractNodeTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.*
+import org.gradle.jvm.toolchain.JavaLauncher
 import java.io.File
 
-abstract class PlugwrightRunTask : AbstractPlugwrightTask() {
+/** Starts the local Paper server interactively, for manual poking outside a test run. */
+abstract class PlugwrightRunServerTask : AbstractNodeTask() {
+
+    @get:InputDirectory
+    abstract val runDir: DirectoryProperty
+
+    @get:Input
+    abstract val serverJarPath: Property<String>
+
+    @get:Input
+    abstract val jvmArgs: ListProperty<String>
+
+    @get:Input
+    abstract val acceptEula: Property<Boolean>
+
+    @get:Nested
+    @get:Optional
+    abstract val javaLauncher: Property<JavaLauncher>
 
     init {
         group = "verification"
@@ -12,24 +34,19 @@ abstract class PlugwrightRunTask : AbstractPlugwrightTask() {
 
     @TaskAction
     fun runServer() {
-        val runDirectory = prepareServerEnvironment()
-        
+        val runDirectory = runDir.get().asFile
         val serverJar = serverJarPath.get()
-        val serverArgs = jvmArgs.get()
-        val shouldAcceptEula = acceptEula.get()
+        val finalJvmArgs = jvmArgs.get().toMutableList()
 
-        // Build JVM arguments string
-        val finalJvmArgs = serverArgs.toMutableList()
-        
-        // Ensure EULA argument is present if acceptEula is true
-        if (shouldAcceptEula && !finalJvmArgs.any { it.contains("eula.agree") }) {
+        if (acceptEula.get() && finalJvmArgs.none { it.contains("eula.agree") }) {
             finalJvmArgs.add("-Dcom.mojang.eula.agree=true")
         }
-        
+
         val javaPath = if (javaLauncher.isPresent) {
             javaLauncher.get().executablePath.asFile.absolutePath
         } else {
-            File(System.getProperty("java.home"), "bin/java" + if (System.getProperty("os.name").lowercase().contains("win")) ".exe" else "").absolutePath
+            val isWindows = System.getProperty("os.name").lowercase().contains("win")
+            File(System.getProperty("java.home"), "bin/java" + if (isWindows) ".exe" else "").absolutePath
         }
 
         logger.lifecycle("Starting test server for debugging...")
@@ -47,7 +64,7 @@ abstract class PlugwrightRunTask : AbstractPlugwrightTask() {
                 logger.lifecycle("========================================================\n")
             }
         }
-        
+
         logger.lifecycle("Test server stopped")
     }
 }

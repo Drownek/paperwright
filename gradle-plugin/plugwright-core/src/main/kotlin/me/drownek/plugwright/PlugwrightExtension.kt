@@ -1,14 +1,17 @@
 package me.drownek.plugwright
 
+import me.drownek.plugwright.api.LegacyEnvironmentProperties
+import me.drownek.plugwright.api.PlugwrightMode
+import me.drownek.plugwright.api.RunDirFile
 import org.gradle.api.Project
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import java.io.File
 
-abstract class PlugwrightExtension(project: Project) {
+abstract class PlugwrightExtension(project: Project) : LegacyEnvironmentProperties {
     /**
-     * Directory containing test files (.spec.js)
+     * Directory containing test files (.spec.js / .spec.ts)
      */
     val testsDir: DirectoryProperty = project.objects.directoryProperty().convention(
         project.layout.projectDirectory.dir("src/test/e2e")
@@ -27,83 +30,66 @@ abstract class PlugwrightExtension(project: Project) {
     val downloadNode: Property<Boolean> = project.objects.property(Boolean::class.java).convention(false)
 
     /**
-     * Directory where the server will be run from.
-     * Will be created automatically if it doesn't exist.
+     * Environment the unsuffixed task aliases (`plugwrightTest`, `plugwrightClean`, …) point
+     * at. Only meaningful once more than one environment is declared.
      */
-    val runDir: DirectoryProperty = project.objects.directoryProperty().convention(
+    val primaryEnvironment: Property<String> = project.objects.property(String::class.java).convention(DEFAULT_ENVIRONMENT_NAME)
+
+    /**
+     * Mode registry and declared environments. See [registerMode] and [environments].
+     */
+    val environments: EnvironmentContainer = EnvironmentContainer(project.objects)
+
+    /** Registers a [PlugwrightMode] so [environments] can create environments of its spec type. */
+    fun registerMode(mode: PlugwrightMode<*>) {
+        environments.registerMode(mode)
+    }
+
+    /** Declares the environments tests can run against. */
+    fun environments(action: EnvironmentContainer.() -> Unit) {
+        environments.action()
+    }
+
+    // ---- Deprecated flat properties --------------------------------------------------
+    // Pre-3.0 shape: describes a single implicit "local" environment. Still read whenever
+    // the build script has no environments { } block — see PlugwrightMode.applyLegacyDefaults.
+
+    @Deprecated("Use environments { create(\"local\", LocalMode) { minecraftVersion.set(...) } }")
+    override val minecraftVersion: Property<String> = project.objects.property(String::class.java).convention("1.19.4")
+
+    @Deprecated("Use environments { create(\"local\", LocalMode) { jvmArgs.set(...) } }")
+    override val jvmArgs: ListProperty<String> = project.objects.listProperty(String::class.java).convention(
+        listOf("-Xmx2G")
+    )
+
+    @Deprecated("Use environments { create(\"local\", LocalMode) { acceptEula.set(...) } }")
+    override val acceptEula: Property<Boolean> = project.objects.property(Boolean::class.java).convention(true)
+
+    @Deprecated("Use environments { create(\"local\", LocalMode) { runDir.set(...) } }")
+    override val runDir: DirectoryProperty = project.objects.directoryProperty().convention(
         project.layout.projectDirectory.dir("run")
     )
 
-    /**
-     * Minecraft version for the Paper server (e.g., "1.19.4", "1.20.4")
-     */
-    val minecraftVersion: Property<String> = project.objects.property(String::class.java).convention("1.19.4")
-
-    /**
-     * JVM arguments to pass when starting the server.
-     */
-    val jvmArgs: ListProperty<String> = project.objects.listProperty(String::class.java).convention(
-        listOf(
-            "-Xmx2G"
-        )
+    @Deprecated("Use environments { create(\"local\", LocalMode) { cleanExcludePatterns.set(...) } }")
+    override val cleanExcludePatterns: ListProperty<String> = project.objects.listProperty(String::class.java).convention(
+        listOf("server.jar", "cache", "libraries")
     )
 
-    /**
-     * Whether to accept the Minecraft EULA automatically.
-     * When true, adds -Dcom.mojang.eula.agree=true to JVM args.
-     */
-    val acceptEula: Property<Boolean> = project.objects.property(Boolean::class.java).convention(true)
+    @Deprecated("Use environments { create(\"local\", LocalMode) { downloadPlugins { ... } } }")
+    override val pluginUrls: ListProperty<String> = project.objects.listProperty(String::class.java).convention(emptyList())
 
-    /**
-     * List of files/folders to exclude from deletion during plugwrightClean.
-     * By default, excludes server.jar, cache, and libraries folders.
-     * These paths are relative to the run directory.
-     */
-    val cleanExcludePatterns: ListProperty<String> = project.objects.listProperty(String::class.java).convention(
-        listOf(
-            "server.jar",
-            "cache",
-            "libraries"
-        )
-    )
+    @Deprecated("Use environments { create(\"local\", LocalMode) { useExternalPluginsOnly.set(...) } }")
+    override val useExternalPluginsOnly: Property<Boolean> = project.objects.property(Boolean::class.java).convention(false)
 
-    /**
-     * URLs of plugins to download before running tests.
-     * These plugins will be placed in the server's plugins directory.
-     */
-    val pluginUrls: ListProperty<String> = project.objects.listProperty(String::class.java).convention(emptyList())
-
-    /**
-     * Whether to use only externally downloaded plugins instead of building the project plugin.
-     * When true, the plugwrightTest task will not depend on jar/shadowJar/reobfJar tasks.
-     * Useful when running E2E tests with plugins downloaded from external sources only.
-     */
-    val useExternalPluginsOnly: Property<Boolean> = project.objects.property(Boolean::class.java).convention(false)
-
-    /**
-     * List of files to write into the run directory before the server starts.
-     * Internal storage — use the writeFiles { } DSL block to populate.
-     */
-    val runDirFiles: ListProperty<RunDirFile> = project.objects.listProperty(RunDirFile::class.java).convention(emptyList())
+    @Deprecated("Use environments { create(\"local\", LocalMode) { writeFiles { ... } } }")
+    override val runDirFiles: ListProperty<RunDirFile> = project.objects.listProperty(RunDirFile::class.java).convention(emptyList())
 
     /**
      * DSL method for staging files into the run directory before server start.
      *
      * Paths are relative to the run directory.
-     *
-     * Example:
-     * ```
-     * writeFiles {
-     *     // inline text content
-     *     file("plugins/SomePlugin/config.yml", """
-     *         key: "value"
-     *     """.trimIndent())
-     *
-     *     // copy from a local source file
-     *     file("plugins/MyPlugin/data.json", projectDir.resolve("test-fixtures/data.json"))
-     * }
-     * ```
      */
+    @Deprecated("Use environments { create(\"local\", LocalMode) { writeFiles { ... } } }")
     fun writeFiles(action: RunDirFileSpec.() -> Unit) {
         val spec = RunDirFileSpec()
         action(spec)
@@ -128,25 +114,9 @@ abstract class PlugwrightExtension(project: Project) {
     }
 
     /**
-     * Represents a single file to be written into the run directory.
-     * Exactly one of [content] or [sourceFile] will be non-null.
-     */
-    data class RunDirFile(
-        val path: String,
-        val content: String?,
-        val sourceFile: File?
-    )
-
-    /**
      * DSL method for configuring plugin downloads.
-     * Example:
-     * ```
-     * downloadPlugins {
-     *     url("https://example.com/plugin1.jar")
-     *     url("https://example.com/plugin2.jar")
-     * }
-     * ```
      */
+    @Deprecated("Use environments { create(\"local\", LocalMode) { downloadPlugins { ... } } }")
     fun downloadPlugins(action: PluginDownloadSpec.() -> Unit) {
         val spec = PluginDownloadSpec()
         action(spec)

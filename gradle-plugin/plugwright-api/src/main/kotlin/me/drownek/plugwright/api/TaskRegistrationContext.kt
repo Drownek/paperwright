@@ -40,6 +40,15 @@ interface TaskRegistrationContext {
      * the matrix run it before the tests.
      */
     fun prepareTask(task: TaskProvider<out Task>)
+
+    /**
+     * Overrides the mode-specific part of this environment's runner config ([ConfigNode],
+     * landing under `environment.config`), computed lazily at task execution time.
+     *
+     * Use this instead of [PlugwrightMode.serialize] when the value needs something only a
+     * task can reach — a Gradle service such as the Java toolchain, for instance.
+     */
+    fun environmentConfig(node: Provider<ConfigNode>)
 }
 
 /** Kotlin-friendly overload of [TaskRegistrationContext.register]. */

@@ -1,14 +1,23 @@
 package me.drownek.plugwright
 
+import me.drownek.plugwright.api.ConfigNode
 import me.drownek.plugwright.api.ConfigNodeBuilder
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import java.io.File
 
-abstract class PlugwrightTestTask : AbstractPlugwrightTask() {
+/**
+ * Runs the compiled test suite against one environment.
+ *
+ * Mode-agnostic: whichever mode owns this environment prepares whatever it needs through
+ * its own tasks (wired in via [me.drownek.plugwright.api.TaskRegistrationContext.prepareTask])
+ * and hands over the mode-specific part of the runner config through [environmentConfig].
+ */
+abstract class PlugwrightTestTask : AbstractNodeTask() {
 
     @get:InputDirectory
     @get:Optional
@@ -22,9 +31,26 @@ abstract class PlugwrightTestTask : AbstractPlugwrightTask() {
     @get:Optional
     abstract val testNames: Property<String>
 
-    /** Name of the environment under test. Written into the runner config and into report names. */
+    /** Name of the environment under test. Written into the runner config and report names. */
     @get:Input
     abstract val environmentName: Property<String>
+
+    /** Mode id this environment runs under (`local`, `external`, …). */
+    @get:Input
+    abstract val modeId: Property<String>
+
+    /** Test name substrings to skip in this environment. */
+    @get:Input
+    @get:Optional
+    abstract val excludeTests: ListProperty<String>
+
+    /**
+     * The mode-specific part of the runner config (`environment.config`). Set by the plugin
+     * from either [me.drownek.plugwright.api.PlugwrightMode.serialize] or the mode's own
+     * [me.drownek.plugwright.api.TaskRegistrationContext.environmentConfig] override.
+     */
+    @get:Internal
+    abstract val environmentConfig: Property<ConfigNode>
 
     /** Where the generated runner config is written before the CLI is invoked. */
     @get:OutputFile
@@ -41,15 +67,7 @@ abstract class PlugwrightTestTask : AbstractPlugwrightTask() {
     @TaskAction
     fun runTests() {
         val nodePaths = resolveNode()
-        prepareServerEnvironment()
 
-        val serverJar = serverJarPath.get()
-        val serverDirectory = serverDir.get()
-        val mcVersion = minecraftVersion.get()
-        val serverArgs = jvmArgs.get()
-        val shouldAcceptEula = acceptEula.get()
-
-        // Check tests directory
         val userTestsDirectory = if (testsDir.isPresent) {
             testsDir.get().asFile
         } else {
@@ -62,60 +80,11 @@ abstract class PlugwrightTestTask : AbstractPlugwrightTask() {
             return
         }
 
-        // Build JVM arguments string for the runner
-        val finalJvmArgs = serverArgs.toMutableList()
-
-        // Ensure EULA argument is present if acceptEula is true
-        if (shouldAcceptEula && !finalJvmArgs.any { it.contains("eula.agree") }) {
-            finalJvmArgs.add("-Dcom.mojang.eula.agree=true")
-        }
-
-        val jvmArgsString = finalJvmArgs.joinToString(" ")
-
-        // Run Tests using the npm package
-        val javaPath = if (javaLauncher.isPresent) {
-            javaLauncher.get().executablePath.asFile.absolutePath
-        } else {
-            File(System.getProperty("java.home"), "bin/java" + if (System.getProperty("os.name").lowercase().contains("win")) ".exe" else "").absolutePath
-        }
-
-        logger.lifecycle("Running E2E tests...")
-        logger.lifecycle("Server JAR: $serverJar")
-        logger.lifecycle("JVM Args: $jvmArgsString")
+        logger.lifecycle("Running E2E tests for environment '${environmentName.get()}'...")
 
         val configDestination = configFile.get().asFile
-        writeRunnerConfig(
-            destination = configDestination,
-            serverJar = serverJar.trim(),
-            serverDirectory = serverDirectory.trim(),
-            javaPath = javaPath,
-            jvmArgs = finalJvmArgs,
-            minecraftVersion = mcVersion,
-            testsDirectory = userTestsDirectory
-        )
+        writeRunnerConfig(configDestination, userTestsDirectory)
         logger.lifecycle("Runner config: ${configDestination.absolutePath}")
-
-        // The environment variables are the pre-3.0 transport. The runner prefers --config
-        // and falls back to these, so an older runner still works with a newer plugin.
-        val envMap = mutableMapOf(
-            "SERVER_JAR" to serverJar.trim(),
-            "SERVER_DIR" to serverDirectory.trim(),
-            "JAVA_PATH" to javaPath,
-            "JVM_ARGS" to jvmArgsString,
-            "MC_VERSION" to mcVersion
-        )
-
-        if (testFiles.isPresent) {
-            val fileFilter = testFiles.get()
-            envMap["TEST_FILES"] = fileFilter
-            logger.lifecycle("Test files filter: $fileFilter")
-        }
-
-        if (testNames.isPresent) {
-            val nameFilter = testNames.get()
-            envMap["TEST_NAMES"] = nameFilter
-            logger.lifecycle("Test names filter: $nameFilter")
-        }
 
         val defaultCliJs = File(userTestsDirectory, "node_modules/@drownek/plugwright/dist/cli.js")
         val cliJsFile = sequenceOf(
@@ -130,50 +99,28 @@ abstract class PlugwrightTestTask : AbstractPlugwrightTask() {
                     "Did 'npm install' succeed in ${userTestsDirectory.absolutePath}?"
             )
 
-        runCommand(
-            userTestsDirectory,
-            nodePaths.node, cliJsFile.absolutePath, "--config", configDestination.absolutePath,
-            env = envMap
-        )
+        runCommand(userTestsDirectory, nodePaths.node, cliJsFile.absolutePath, "--config", configDestination.absolutePath)
 
         logger.lifecycle("E2E tests completed successfully")
     }
 
-    private fun writeRunnerConfig(
-        destination: File,
-        serverJar: String,
-        serverDirectory: String,
-        javaPath: String,
-        jvmArgs: List<String>,
-        minecraftVersion: String,
-        testsDirectory: File
-    ) {
-        val envName = environmentName.get()
+    private fun writeRunnerConfig(destination: File, testsDirectory: File) {
         val fileFilters = testFiles.orNull.splitFilter()
         val nameFilters = testNames.orNull.splitFilter()
+        val excludeList = if (excludeTests.isPresent) excludeTests.get() else emptyList()
 
         val root = ConfigNodeBuilder().apply {
             put("version", RunnerConfigWriter.CONFIG_VERSION)
             obj("environment") {
-                put("name", envName)
-                put("mode", "local")
-                obj("config") {
-                    put("serverJar", serverJar)
-                    put("serverDir", serverDirectory)
-                    put("javaPath", javaPath)
-                    putStrings("jvmArgs", jvmArgs)
-                    put("minecraftVersion", minecraftVersion)
-                    // The bots connect to the server this task starts; the port still comes
-                    // from server.properties defaults until environments can pick their own.
-                    put("host", "localhost")
-                    put("port", 25565)
-                }
+                put("name", environmentName.get())
+                put("mode", modeId.get())
+                put("config", environmentConfig.get())
             }
             obj("tests") {
                 put("dir", testsDirectory.absolutePath)
                 if (fileFilters != null) putStrings("include", fileFilters) else putNull("include")
                 if (nameFilters != null) putStrings("names", nameFilters) else putNull("names")
-                putNull("exclude")
+                if (excludeList.isNotEmpty()) putStrings("exclude", excludeList) else putNull("exclude")
                 // null means "runner default", which TEST_TIMEOUT can still override.
                 putNull("timeoutMs")
             }

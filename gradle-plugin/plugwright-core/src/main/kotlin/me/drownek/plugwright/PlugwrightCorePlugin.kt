@@ -1,10 +1,10 @@
 package me.drownek.plugwright
 
+import me.drownek.plugwright.api.ConfigNodeBuilder
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.plugins.JavaPluginExtension
-import org.gradle.jvm.toolchain.JavaToolchainService
+import org.gradle.api.provider.Provider
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -21,11 +21,18 @@ object BannerState {
 
 /**
  * Name of the implicit environment used while the build script has no `environments { }`
- * block: the flat extension properties describe one local server.
+ * block: the flat extension properties describe one environment under this name.
  */
 const val DEFAULT_ENVIRONMENT_NAME = "local"
 
-class PlugwrightPlugin : Plugin<Project> {
+/**
+ * Mode-agnostic engine: the extension, the shared compile step, and per-environment task
+ * generation. Knows nothing about `local`/`external`/any other mode — those register
+ * themselves through [PlugwrightExtension.registerMode] before this plugin's
+ * `afterEvaluate` runs. See [PlugwrightPlugin] (in the module that publishes the plugin id)
+ * for where the built-in modes actually get registered.
+ */
+class PlugwrightCorePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         val extension = project.extensions.create("plugwright", PlugwrightExtension::class.java, project)
 
@@ -33,56 +40,6 @@ class PlugwrightPlugin : Plugin<Project> {
         // and survives 'gradle clean'. Safe for concurrent builds thanks to the
         // file lock in NodeManager.
         val defaultNodeInstallDir = File(project.gradle.gradleUserHomeDir, "caches/plugwright/node")
-
-        // Register plugwrightClean task
-        val plugwrightClean = project.tasks.register("plugwrightClean") {
-            group = "verification"
-            description = "Wipes the test server data for a clean slate."
-
-            doFirst {
-                if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
-            }
-
-            doLast {
-                val runDir = extension.runDir.get().asFile
-                val excludePatterns = extension.cleanExcludePatterns.get()
-
-                if (!runDir.exists()) {
-                    project.logger.lifecycle("  Run directory doesn't exist yet, nothing to clean")
-                    return@doLast
-                }
-
-                project.logger.lifecycle("  Cleaning run directory (excluding: ${excludePatterns.joinToString(", ")})")
-
-                // Get all files and directories in the run folder
-                val allEntries = runDir.listFiles() ?: emptyArray()
-
-                // Separate entries into deleted and kept
-                val deletedFiles = mutableListOf<String>()
-                val keptFiles = mutableListOf<String>()
-
-                // Delete everything except the excluded patterns
-                allEntries.forEach { entry ->
-                    val shouldExclude = excludePatterns.any { pattern ->
-                        entry.name == pattern
-                    }
-
-                    if (!shouldExclude) {
-                        deletedFiles.add(entry.name)
-                        project.delete(entry)
-                    } else {
-                        keptFiles.add(entry.name)
-                    }
-                }
-
-                if (deletedFiles.isNotEmpty()) {
-                    project.logger.lifecycle("    deleted:   ${deletedFiles.joinToString(", ")}")
-                }
-                if (keptFiles.isNotEmpty()) {
-                    project.logger.lifecycle("    preserved: ${keptFiles.joinToString(", ")}")
-                }
-            }
-        }
 
         val plugwrightCompileTests = project.tasks.register("plugwrightCompileTests", PlugwrightCompileTestsTask::class.java) {
             doFirst {
@@ -95,106 +52,100 @@ class PlugwrightPlugin : Plugin<Project> {
             nodeInstallDir.set(defaultNodeInstallDir)
         }
 
-        project.tasks.register("plugwrightTest", PlugwrightTestTask::class.java) {
-            // Ensure clean runs before test
-            dependsOn(plugwrightClean)
-            // npm install + tsc are shared across environments, so they live in their own task
-            dependsOn(plugwrightCompileTests)
+        registerInitTask(project, extension, defaultNodeInstallDir)
 
-            doFirst {
-                if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
-            }
+        project.afterEvaluate {
+            wireEnvironments(project, extension, plugwrightCompileTests, defaultNodeInstallDir)
+        }
+    }
 
-            testsDir.set(extension.testsDir)
-            environmentName.set(DEFAULT_ENVIRONMENT_NAME)
-            configFile.set(project.layout.buildDirectory.file("tmp/plugwright/$DEFAULT_ENVIRONMENT_NAME.json"))
-            minecraftVersion.set(extension.minecraftVersion)
-            jvmArgs.set(extension.jvmArgs)
-            acceptEula.set(extension.acceptEula)
-            pluginUrls.set(extension.pluginUrls)
-            runDirFiles.set(extension.runDirFiles)
-            nodeVersion.set(extension.nodeVersion)
-            downloadNode.set(extension.downloadNode)
-            nodeInstallDir.set(defaultNodeInstallDir)
+    private fun wireEnvironments(
+        project: Project,
+        extension: PlugwrightExtension,
+        plugwrightCompileTests: org.gradle.api.tasks.TaskProvider<PlugwrightCompileTestsTask>,
+        defaultNodeInstallDir: File
+    ) {
+        // No environments { } block: fold the deprecated flat properties into one implicit
+        // environment, using whatever mode was registered under the default name.
+        if (extension.environments.isEmpty) {
+            val entry = extension.environments.createImplicit(DEFAULT_ENVIRONMENT_NAME)
+            entry.mode.erased().applyLegacyDefaults(entry.spec, extension)
+        }
 
-            // Support command line properties for filtering
-            if (project.hasProperty("testFiles")) {
-                testFiles.set(project.property("testFiles") as String)
-            }
-
-            if (project.hasProperty("testNames")) {
-                testNames.set(project.property("testNames") as String)
-            }
-
-            serverJarPath.set(
-                extension.runDir.map { runDir ->
-                    val serverJar = runDir.asFile.resolve("server.jar")
-                    serverJar.absolutePath
-                }
+        val primaryName = extension.primaryEnvironment.get()
+        if (extension.environments[primaryName] == null) {
+            throw GradleException(
+                "plugwright.primaryEnvironment is set to '$primaryName', but no such environment is " +
+                    "declared. Declared environments: ${extension.environments.names.joinToString()}"
             )
+        }
 
-            serverDir.set(
-                extension.runDir.map { runDir ->
-                    runDir.asFile.absolutePath
+        val projectPluginJarProvider = resolveProjectPluginJar(project, extension)
+        val validationProblems = mutableListOf<String>()
+
+        extension.environments.all.forEach { entry ->
+            val envName = entry.spec.name
+            val mode = entry.mode.erased()
+            val ctx = TaskRegistrationContextImpl(project, envName, envName == primaryName, projectPluginJarProvider)
+
+            val testTask = ctx.register("Test", PlugwrightTestTask::class.java) {
+                doFirst {
+                    if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
                 }
-            )
+                dependsOn(plugwrightCompileTests)
+                testsDir.set(extension.testsDir)
+                environmentName.set(envName)
+                modeId.set(mode.id)
+                excludeTests.set(entry.spec.excludeTests)
+                configFile.set(project.layout.buildDirectory.file("tmp/plugwright/$envName.json"))
+                nodeVersion.set(extension.nodeVersion)
+                downloadNode.set(extension.downloadNode)
+                nodeInstallDir.set(defaultNodeInstallDir)
 
-            // Configure Java Toolchain if Java plugin is present
-            project.plugins.withId("java") {
-                val javaExtension = project.extensions.findByType(JavaPluginExtension::class.java)
-                val javaToolchains = project.extensions.findByType(JavaToolchainService::class.java)
+                if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
+                if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
+            }
 
-                if (javaExtension != null && javaToolchains != null) {
-                    javaLauncher.set(javaToolchains.launcherFor(javaExtension.toolchain))
-                }
+            val validation = ValidationContextImpl(envName, project.logger)
+            mode.validate(entry.spec, validation)
+            validationProblems += validation.errors.map { "[$envName] $it" }
+
+            mode.registerTasks(entry.spec, ctx)
+
+            testTask.configure {
+                ctx.prepareTaskRef?.let { dependsOn(it) }
+                environmentConfig.set(
+                    ctx.environmentConfigProvider
+                        ?: project.provider { ConfigNodeBuilder().apply { mode.serialize(entry.spec, this) }.build() }
+                )
             }
         }
 
-        project.tasks.register("plugwrightRunServer", PlugwrightRunTask::class.java) {
-            // Ensure clean runs before starting the server
-            dependsOn(plugwrightClean)
-
-            doFirst {
-                if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
-            }
-
-            minecraftVersion.set(extension.minecraftVersion)
-            jvmArgs.set(extension.jvmArgs)
-            acceptEula.set(extension.acceptEula)
-            pluginUrls.set(extension.pluginUrls)
-            runDirFiles.set(extension.runDirFiles)
-            nodeVersion.set(extension.nodeVersion)
-            downloadNode.set(extension.downloadNode)
-            nodeInstallDir.set(defaultNodeInstallDir)
-
-            serverJarPath.set(
-                extension.runDir.map { runDir ->
-                    val serverJar = runDir.asFile.resolve("server.jar")
-                    serverJar.absolutePath
-                }
-            )
-
-            serverDir.set(
-                extension.runDir.map { runDir ->
-                    runDir.asFile.absolutePath
-                }
-            )
-
-            // Configure Java Toolchain if Java plugin is present
-            project.plugins.withId("java") {
-                val javaExtension = project.extensions.findByType(JavaPluginExtension::class.java)
-                val javaToolchains = project.extensions.findByType(JavaToolchainService::class.java)
-
-                if (javaExtension != null && javaToolchains != null) {
-                    javaLauncher.set(javaToolchains.launcherFor(javaExtension.toolchain))
-                }
-            }
+        if (validationProblems.isNotEmpty()) {
+            throw GradleException("plugwright configuration problems:\n" + validationProblems.joinToString("\n") { "  $it" })
         }
+    }
 
+    /** The jar of the plugin under test, from `shadowJar` / `reobfJar` / `jar`. Absent when
+     *  the build asked for external plugins only, or when no jar-producing task exists. */
+    private fun resolveProjectPluginJar(project: Project, extension: PlugwrightExtension): Provider<File> {
+        if (extension.useExternalPluginsOnly.get()) {
+            return project.objects.property(File::class.java)
+        }
+        val jarTask = when {
+            project.tasks.findByName("shadowJar") != null -> project.tasks.named("shadowJar")
+            project.tasks.findByName("reobfJar") != null -> project.tasks.named("reobfJar")
+            project.tasks.findByName("jar") != null -> project.tasks.named("jar")
+            else -> null
+        } ?: return project.objects.property(File::class.java)
+        return jarTask.map { it.outputs.files.singleFile }
+    }
+
+    private fun registerInitTask(project: Project, extension: PlugwrightExtension, defaultNodeInstallDir: File) {
         project.tasks.register("plugwrightInit") {
             group = "verification"
             description = "Interactively initializes a plugwright-test environment with required configs and an initial test file."
-            
+
             doFirst {
                 if (BannerState.printed.compareAndSet(false, true)) Banner.print(project.logger)
             }
@@ -288,7 +239,7 @@ class PlugwrightPlugin : Plugin<Project> {
                     testFile.writeText(
                         """
                         import {expect, test} from '@drownek/plugwright';
-                        
+
                         test('help displays message', async ({ player, server }) => {
                           player.chat('/help');
                           await expect(player).toHaveReceivedMessage('Help');
@@ -325,27 +276,6 @@ class PlugwrightPlugin : Plugin<Project> {
                 } catch (e: Exception) {
                     if (e is GradleException) throw e
                     throw GradleException("EXEC FATAL: Failed to launch npm process. Original error: ${e.message}", e)
-                }
-            }
-        }
-
-        project.afterEvaluate {
-            // Only set up plugin jar dependency if not using external plugins only
-            if (!extension.useExternalPluginsOnly.get()) {
-                // Try to find the task that produces the plugin jar
-                val jarTask = when {
-                    project.tasks.findByName("shadowJar") != null -> project.tasks.named("shadowJar")
-                    project.tasks.findByName("reobfJar") != null -> project.tasks.named("reobfJar")
-                    else -> project.tasks.named("jar")
-                }
-
-                if (jarTask.isPresent) {
-                    project.tasks.named("plugwrightTest", PlugwrightTestTask::class.java).configure {
-                        pluginJar.set(jarTask.map { it.outputs.files.singleFile })
-                    }
-                    project.tasks.named("plugwrightRunServer", PlugwrightRunTask::class.java).configure {
-                        pluginJar.set(jarTask.map { it.outputs.files.singleFile })
-                    }
                 }
             }
         }

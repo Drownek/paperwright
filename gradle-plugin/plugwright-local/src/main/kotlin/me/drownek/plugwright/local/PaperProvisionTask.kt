@@ -1,11 +1,15 @@
-package me.drownek.plugwright
+package me.drownek.plugwright.local
 
 import com.google.gson.JsonParser
+import me.drownek.plugwright.api.RunDirFile
+import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
-import org.gradle.jvm.toolchain.JavaLauncher
-import org.gradle.api.GradleException
+import org.yaml.snakeyaml.DumperOptions
+import org.yaml.snakeyaml.Yaml
 import java.io.File
 import java.net.URI
 import java.net.http.HttpClient
@@ -14,48 +18,38 @@ import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Duration
-import org.yaml.snakeyaml.Yaml
-import org.yaml.snakeyaml.DumperOptions
 
-abstract class AbstractPlugwrightTask : AbstractNodeTask() {
+/**
+ * Downloads Paper, stages configured files, patches server/bukkit/spigot configs, and
+ * installs the plugin under test — everything the local server needs before it can start.
+ */
+abstract class PaperProvisionTask : DefaultTask() {
 
-    @get:Input
-    abstract val serverJarPath: Property<String>
-
-    @get:Input
-    abstract val serverDir: Property<String>
+    @get:OutputDirectory
+    abstract val runDir: DirectoryProperty
 
     @get:Input
     abstract val minecraftVersion: Property<String>
 
     @get:Input
-    abstract val jvmArgs: ListProperty<String>
-
-    @get:Input
-    abstract val acceptEula: Property<Boolean>
-
-    @get:Input
     @get:Optional
     abstract val pluginJar: Property<File>
-
-    @get:Nested
-    @get:Optional
-    abstract val javaLauncher: Property<JavaLauncher>
 
     @get:Input
     abstract val pluginUrls: ListProperty<String>
 
     @get:Input
     @get:Optional
-    abstract val runDirFiles: ListProperty<PlugwrightExtension.RunDirFile>
+    abstract val runDirFiles: ListProperty<RunDirFile>
 
-    protected fun prepareServerEnvironment(): File {
-        val serverJar = serverJarPath.get()
-        val serverDirectory = serverDir.get()
-        val mcVersion = minecraftVersion.get()
-        
-        // Create run directory if it doesn't exist
-        val runDirectory = File(serverDirectory)
+    init {
+        group = "verification"
+        description = "Downloads Paper and prepares the local test server"
+    }
+
+    @TaskAction
+    fun provision() {
+        val runDirectory = runDir.get().asFile
         if (!runDirectory.exists() && !runDirectory.mkdirs()) {
             throw GradleException("Failed to create run directory at ${runDirectory.absolutePath}")
         }
@@ -67,17 +61,19 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
             filesToWrite.forEach { entry ->
                 val destination = File(runDirectory, entry.path)
                 destination.parentFile?.mkdirs()
+                val content = entry.content
+                val sourceFile = entry.sourceFile
                 when {
-                    entry.content != null -> {
-                        destination.writeText(entry.content, Charsets.UTF_8)
+                    content != null -> {
+                        destination.writeText(content, Charsets.UTF_8)
                         logger.lifecycle("  Wrote: ${entry.path}")
                     }
-                    entry.sourceFile != null -> {
-                        if (!entry.sourceFile.exists()) {
-                            throw GradleException("Staged file source does not exist: ${entry.sourceFile.absolutePath}")
+                    sourceFile != null -> {
+                        if (!sourceFile.exists()) {
+                            throw GradleException("Staged file source does not exist: ${sourceFile.absolutePath}")
                         }
-                        Files.copy(entry.sourceFile.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                        logger.lifecycle("  Copied: ${entry.sourceFile.name} -> ${entry.path}")
+                        Files.copy(sourceFile.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                        logger.lifecycle("  Copied: ${sourceFile.name} -> ${entry.path}")
                     }
                 }
             }
@@ -87,8 +83,7 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
         val serverProperties = File(runDirectory, "server.properties")
         if (serverProperties.exists()) {
             var lines = Files.readAllLines(serverProperties.toPath()).toMutableList()
-            
-            // Update or add online-mode=false
+
             val hasOnlineMode = lines.any { it.trim().startsWith("online-mode=") }
             if (hasOnlineMode) {
                 lines = lines.map { line ->
@@ -97,8 +92,7 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
             } else {
                 lines.add("online-mode=false")
             }
-            
-            // Update or add connection-throttle=0 (required for E2E tests to prevent "Connection throttled" errors)
+
             val hasConnectionThrottle = lines.any { it.trim().startsWith("connection-throttle=") }
             if (hasConnectionThrottle) {
                 lines = lines.map { line ->
@@ -117,17 +111,14 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
             } else {
                 lines.add("spawn-protection=0")
             }
-            
+
             Files.write(serverProperties.toPath(), lines)
         } else {
             logger.lifecycle("Creating server.properties with online-mode=false, connection-throttle=0 and spawn-protection=0")
             Files.write(serverProperties.toPath(), listOf("online-mode=false", "connection-throttle=0", "spawn-protection=0"))
         }
 
-        // Configure bukkit.yml settings
         configureBukkitSettings(runDirectory)
-
-        // Configure spigot.yml settings
         configureSpigotSettings(runDirectory)
 
         // Create plugins directory if it doesn't exist
@@ -135,7 +126,7 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
         if (!pluginsDir.exists() && !pluginsDir.mkdirs()) {
             throw GradleException("Failed to create plugins directory at ${pluginsDir.absolutePath}")
         }
-        
+
         // Copy the project plugin to the server
         if (pluginJar.isPresent) {
             val jarFile = pluginJar.get()
@@ -161,55 +152,53 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
         }
 
         // Download Paper server if needed
-        val serverJarFile = File(serverJar)
+        val serverJarFile = File(runDirectory, "server.jar")
         if (!serverJarFile.exists()) {
-            logger.lifecycle("Server JAR not found. Downloading Paper server for Minecraft $mcVersion...")
-            downloadPaperServer(mcVersion, serverJarFile)
+            logger.lifecycle("Server JAR not found. Downloading Paper server for Minecraft ${minecraftVersion.get()}...")
+            downloadPaperServer(minecraftVersion.get(), serverJarFile)
         }
-        
-        return runDirectory
     }
 
-    protected fun downloadPaperServer(version: String, destination: File) {
+    private fun downloadPaperServer(version: String, destination: File) {
         val httpClient = HttpClient.newBuilder().build()
-        
+
         try {
             logger.lifecycle("Fetching latest Paper build for Minecraft $version...")
-            
+
             val versionInfoUrl = "https://fill.papermc.io/v3/projects/paper/versions/$version"
             val versionRequest = HttpRequest.newBuilder()
                 .uri(URI.create(versionInfoUrl))
                 .GET()
                 .build()
-            
+
             val versionResponse = httpClient.send(versionRequest, HttpResponse.BodyHandlers.ofString())
-            
+
             if (versionResponse.statusCode() != 200) {
                 throw GradleException("Failed to fetch Paper version info. Status: ${versionResponse.statusCode()}. Make sure Minecraft version '$version' is valid.")
             }
-            
+
             val versionJson = JsonParser.parseString(versionResponse.body()).asJsonObject
             val buildsArray = versionJson.getAsJsonArray("builds")
-            
+
             if (buildsArray.size() == 0) {
                 throw GradleException("No builds found for Minecraft version $version")
             }
-            
+
             val latestBuild = buildsArray.last().asInt
             logger.lifecycle("Found latest build: $latestBuild")
-            
+
             val buildInfoUrl = "https://fill.papermc.io/v3/projects/paper/versions/$version/builds/$latestBuild"
             val buildRequest = HttpRequest.newBuilder()
                 .uri(URI.create(buildInfoUrl))
                 .GET()
                 .build()
-            
+
             val buildResponse = httpClient.send(buildRequest, HttpResponse.BodyHandlers.ofString())
-            
+
             if (buildResponse.statusCode() != 200) {
                 throw GradleException("Failed to fetch build info. Status: ${buildResponse.statusCode()}")
             }
-            
+
             val buildJson = JsonParser.parseString(buildResponse.body()).asJsonObject
             val downloadsJson = buildJson.getAsJsonObject("downloads")
             val downloadEntry = when {
@@ -221,7 +210,7 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
                     downloadsJson.getAsJsonObject(firstKey)
                 }
             }
-            
+
             val downloadUrl = if (downloadEntry.has("url")) {
                 downloadEntry.get("url").asString
             } else {
@@ -229,29 +218,29 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
                 "https://fill.papermc.io/v3/projects/paper/versions/$version/builds/$latestBuild/downloads/$downloadName"
             }
             logger.lifecycle("Downloading Paper server from: $downloadUrl")
-            
+
             val downloadRequest = HttpRequest.newBuilder()
                 .uri(URI.create(downloadUrl))
                 .GET()
                 .build()
-            
+
             val downloadResponse = httpClient.send(downloadRequest, HttpResponse.BodyHandlers.ofInputStream())
-            
+
             if (downloadResponse.statusCode() != 200) {
                 throw GradleException("Failed to download Paper server. Status: ${downloadResponse.statusCode()}")
             }
-            
+
             destination.parentFile?.mkdirs()
             Files.copy(downloadResponse.body(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            
+
             logger.lifecycle("Paper server downloaded successfully to: ${destination.absolutePath}")
-            
+
         } catch (e: Exception) {
             throw GradleException("Failed to download Paper server: ${e.message}", e)
         }
     }
 
-    protected fun downloadPlugin(httpClient: HttpClient, url: String, pluginsDirectory: File) {
+    private fun downloadPlugin(httpClient: HttpClient, url: String, pluginsDirectory: File) {
         try {
             val uri = try {
                 URI.create(url)
@@ -295,7 +284,7 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
         }
     }
 
-    protected fun configureBukkitSettings(serverDirectory: File) {
+    private fun configureBukkitSettings(serverDirectory: File) {
         val bukkitYmlFile = File(serverDirectory, "bukkit.yml")
 
         try {
@@ -325,7 +314,7 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
         }
     }
 
-    protected fun configureSpigotSettings(serverDirectory: File) {
+    private fun configureSpigotSettings(serverDirectory: File) {
         val spigotYmlFile = File(serverDirectory, "spigot.yml")
 
         try {
@@ -355,5 +344,4 @@ abstract class AbstractPlugwrightTask : AbstractNodeTask() {
             logger.warn("Warning: Could not configure spigot.yml: ${e.message}")
         }
     }
-
 }

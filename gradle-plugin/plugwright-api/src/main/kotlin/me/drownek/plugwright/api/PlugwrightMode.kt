@@ -29,6 +29,12 @@ interface PlugwrightMode<S : EnvironmentSpec> {
     fun validate(spec: S, ctx: ValidationContext) {}
 
     /**
+     * Seeds [spec] from the deprecated flat extension properties, for a build with no
+     * `environments { }` block. No-op for modes with no legacy shape to migrate from.
+     */
+    fun applyLegacyDefaults(spec: S, legacy: LegacyEnvironmentProperties) {}
+
+    /**
      * Writes the mode-specific part of the runner config, landing under
      * `environment.config`. Runs at configuration time, so secrets stay [SecretRef]s.
      */
