@@ -1,6 +1,6 @@
 import type { TestContext } from './types.js';
 
-type Hook = (context: TestContext) => Promise<void>;
+export type Hook = (context: TestContext) => Promise<void> | void;
 type TestFn = (context: TestContext) => Promise<void>;
 
 /**
@@ -9,7 +9,7 @@ type TestFn = (context: TestContext) => Promise<void>;
  * `requires` checks capability flags on `env.capabilities` (e.g. `'console'`, `'op'`) —
  * a value of `false` or `'none'` fails the check. `environments` checks the running
  * environment's name directly, for cases that aren't about capability but about the
- * content of a specific stand. See modes-and-plugins §5.4.
+ * content of a specific stand.
  */
 export interface TestOptions {
     requires?: string[];
@@ -22,9 +22,14 @@ interface DescribeScope {
     afterHooks: Hook[];
 }
 
-interface TestCase {
+export interface TestCase {
     name: string;
     fn: TestFn;
+    /** Spec-level `beforeEach` hooks in run order (outermost `describe` first). */
+    beforeHooks: Hook[];
+    /** Spec-level `afterEach` hooks in run order (innermost `describe` first) — already
+     *  reversed at registration time, see `registerTest`. */
+    afterHooks: Hook[];
     requires: string[];
     environments: string[] | null;
 }
@@ -32,36 +37,24 @@ interface TestCase {
 export const testRegistry: TestCase[] = [];
 export const scopeStack: DescribeScope[] = [{ label: '', beforeHooks: [], afterHooks: [] }];
 
+/** Discards whatever a previously-imported spec file registered, ready for the next one.
+ *  `testRegistry`/`scopeStack` stay module-level with this per-file reset — correct only
+ *  as long as one process runs one environment and files run sequentially. */
+export function resetRegistry(): void {
+    testRegistry.length = 0;
+    scopeStack.length = 0;
+    scopeStack.push({ label: '', beforeHooks: [], afterHooks: [] });
+}
+
 function registerTest(name: string, options: TestOptions, fn: TestFn): void {
     const labels = scopeStack.map(s => s.label).filter(l => l);
     const fullName = [...labels, name].join(' > ');
 
-    const beforeHooks = scopeStack.flatMap(s => s.beforeHooks);
-    const afterHooks = [...scopeStack].reverse().flatMap(s => s.afterHooks);
-
-    const wrappedFn = async (ctx: TestContext) => {
-        let testError: unknown;
-        try {
-            for (const hook of beforeHooks) await hook(ctx);
-            await fn(ctx);
-        } catch (e) {
-            testError = e;
-        } finally {
-            for (const hook of afterHooks) {
-                try {
-                    await hook(ctx);
-                } catch (e) {
-                    testError ??= e;
-                    console.error('[afterEach] Hook error:', (e as Error).message);
-                }
-            }
-        }
-        if (testError) throw testError;
-    };
-
     testRegistry.push({
         name: fullName,
-        fn: wrappedFn,
+        fn,
+        beforeHooks: scopeStack.flatMap(s => s.beforeHooks),
+        afterHooks: [...scopeStack].reverse().flatMap(s => s.afterHooks),
         requires: options.requires ?? [],
         environments: options.environments ?? null,
     });

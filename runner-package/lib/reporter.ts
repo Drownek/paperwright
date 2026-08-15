@@ -125,6 +125,7 @@ export function writeJsonReport(path: string, environmentName: string, testResul
             durationMs: r.durationMs,
             error: r.error ? r.error.message : null,
             skipReason: r.skipReason ?? null,
+            plugin: r.plugin ?? null,
         })),
     };
 
@@ -133,7 +134,7 @@ export function writeJsonReport(path: string, environmentName: string, testResul
 }
 
 /** Writes a JUnit XML report: `testsuite name="plugwright.<env>"`, one `testcase` per test,
- *  spec file as `classname`, full `describe`-chain name as `name`. See modes-and-plugins §5.3. */
+ *  spec file as `classname`, full `describe`-chain name as `name`. */
 export function writeJUnitReport(path: string, environmentName: string, testResults: TestResult[]): void {
     const skipped = testResults.filter(r => r.skipped).length;
     const failed = testResults.filter(r => !r.skipped && !r.passed).length;
@@ -143,12 +144,13 @@ export function writeJUnitReport(path: string, environmentName: string, testResu
         const timeSeconds = (r.durationMs / 1000).toFixed(3);
         const classname = xmlEscape(r.file);
         const name = xmlEscape(r.testName);
+        const pluginAttr = r.plugin ? ` plugin="${xmlEscape(r.plugin)}"` : '';
         const inner = r.skipped
             ? `\n    <skipped message="${xmlEscape(r.skipReason ?? 'skipped')}"/>\n  `
             : !r.passed
                 ? `\n    <failure message="${xmlEscape(r.error?.message ?? 'failed')}">${xmlEscape(r.error?.stack ?? r.error?.message ?? '')}</failure>\n  `
                 : '';
-        return `  <testcase classname="${classname}" name="${name}" time="${timeSeconds}">${inner}</testcase>`;
+        return `  <testcase classname="${classname}" name="${name}" time="${timeSeconds}"${pluginAttr}>${inner}</testcase>`;
     });
 
     const xml = [

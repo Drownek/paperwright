@@ -51,11 +51,24 @@ export interface ReportsConfig {
     junit?: string | null;
 }
 
+export interface PluginConfig {
+    /** npm package name, or a resolvable path to a local plugin module. The default export
+     *  must implement `PlugwrightPlugin`. */
+    specifier: string;
+    options?: Record<string, unknown>;
+    /** Set false to load the plugin's hooks/matchers without pulling in its `tests`. */
+    inheritTests?: boolean;
+}
+
 export interface RunnerConfig {
     version: number;
     environment: EnvironmentConfig;
     tests: TestsConfig;
     reports?: ReportsConfig | null;
+    plugins?: PluginConfig[] | null;
+    /** Crash-recovery journal path for `Session.journal`. Omitted disables on-disk
+     *  persistence — journal entries only survive within the process. */
+    journal?: string | null;
 }
 
 /** Settings of the built-in `local` mode, which spawns its own Paper server. */
@@ -119,6 +132,7 @@ function readConfigFile(path: string): RunnerConfig {
 
     parsed.tests = parsed.tests ?? {};
     parsed.reports = parsed.reports ?? {};
+    parsed.plugins = parsed.plugins ?? [];
     return parsed;
 }
 
