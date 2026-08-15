@@ -13,6 +13,7 @@ import { externalEnvironment } from './lib/environments/external.js';
 import { PlayerWrapper } from './lib/player.js';
 import { printTestSummary, writeJsonReport, writeJUnitReport } from './lib/reporter.js';
 import { loadRunnerConfig } from './lib/config.js';
+import { importOptionalPackage } from './lib/utils.js';
 import type { Environment } from './lib/environment.js';
 import type { EnvironmentConfig, LocalEnvironmentConfig, RunnerConfig } from './lib/config.js';
 import type { ExternalEnvironmentConfig } from './lib/environments/external.js';
@@ -61,7 +62,7 @@ async function resolveEnvironment(cfg: EnvironmentConfig): Promise<Environment> 
     if (cfg.runtime) {
         let mod: any;
         try {
-            mod = await import(cfg.runtime.package);
+            mod = await importOptionalPackage(cfg.runtime.package);
         } catch (error) {
             throw new Error(
                 `Environment "${cfg.name}" needs package "${cfg.runtime.package}", which failed to load: ` +

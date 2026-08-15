@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 import { RunnerMatchers } from './matchers.js';
 import { PLUGIN_API_VERSION } from './plugin.js';
+import { importOptionalPackage } from './utils.js';
 import type { PlugwrightPlugin, PluginTestRef } from './plugin.js';
 import type { Session } from './session.js';
 import type { PlayerWrapper } from './player.js';
@@ -27,7 +28,7 @@ export class PluginHost {
         for (const cfg of configs) {
             let mod: any;
             try {
-                mod = await import(cfg.specifier);
+                mod = await importOptionalPackage(cfg.specifier);
             } catch (error) {
                 throw new Error(`Failed to load plugin "${cfg.specifier}": ${(error as Error).message}`);
             }
