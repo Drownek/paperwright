@@ -92,13 +92,14 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
         val matrixEntries = mutableListOf<MatrixEnvironmentInput>()
         val matrixPrepareTasks = mutableListOf<TaskProvider<out Task>>()
+        val runnerPackageSpecs = linkedSetOf<String>()
 
         extension.environments.all.forEach { entry ->
             val envName = entry.spec.name
             val mode = entry.mode.erased()
             val ctx = TaskRegistrationContextImpl(
                 project, envName, envName == primaryName, projectPluginJarProvider,
-                extension.testsDir.map { it.asFile }
+                extension.testsDir.map { it.asFile }, extension, defaultNodeInstallDir
             )
             val journalFilePath = project.layout.buildDirectory.file("plugwright/$envName-journal.jsonl").get().asFile
 

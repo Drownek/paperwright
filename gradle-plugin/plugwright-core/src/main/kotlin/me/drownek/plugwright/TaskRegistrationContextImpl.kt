@@ -19,7 +19,9 @@ internal class TaskRegistrationContextImpl(
     override val environmentName: String,
     private val isPrimary: Boolean,
     override val projectPluginJar: Provider<File>,
-    override val testsDir: Provider<File>
+    override val testsDir: Provider<File>,
+    private val extension: PlugwrightExtension,
+    private val nodeInstallDir: File
 ) : TaskRegistrationContext {
 
     /** Set by [prepareTask]; read by the plugin once every mode has registered its tasks. */
@@ -50,7 +52,16 @@ internal class TaskRegistrationContextImpl(
     private fun <T : Task> registerInternal(suffix: String, type: Class<T>, aliasBare: Boolean, action: T.() -> Unit): TaskProvider<T> {
         val envSuffix = environmentName.replaceFirstChar { it.uppercaseChar() }
         val taskName = "plugwright$suffix$envSuffix"
-        val provider = project.tasks.register(taskName, type) { action() }
+        val provider = project.tasks.register(taskName, type) {
+            // A mode's task that shells out to Node gets the same Node resolution as core's
+            // own tasks, without every mode having to know where the shared cache lives.
+            if (this is AbstractNodeTask) {
+                nodeVersion.set(extension.nodeVersion)
+                downloadNode.set(extension.downloadNode)
+                this.nodeInstallDir.set(this@TaskRegistrationContextImpl.nodeInstallDir)
+            }
+            action()
+        }
 
         if (aliasBare && isPrimary && aliasedSuffixes.add(suffix)) {
             val aliasName = "plugwright$suffix"
