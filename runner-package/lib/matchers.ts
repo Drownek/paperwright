@@ -2,7 +2,6 @@ import { Matchers } from './expect.js';
 import { PlayerWrapper } from './player.js';
 import { ServerWrapper } from './server.js';
 import { GuiItemLocator } from './wrappers.js';
-import { serverConsoleBuffer } from './bot-utils.js';
 import { sleep } from './utils.js';
 
 export class RunnerMatchers<T = unknown> extends Matchers<T> {
@@ -73,8 +72,13 @@ export class RunnerMatchers<T = unknown> extends Matchers<T> {
             return strict ? msg === expectedMessage : msg.includes(expectedMessage);
         };
 
-        const buffer = this.actual instanceof PlayerWrapper ? this.actual.messageBuffer : serverConsoleBuffer;
-        const view = (): string[] => since !== undefined ? buffer.slice(since) : buffer;
+        // A player's messages are its own (see `PlayerWrapper.messageBuffer`) so one bot's chat
+        // never satisfies an assertion made against another; the server log has no such split,
+        // it's one console shared by the whole session.
+        const buffer = this.actual instanceof PlayerWrapper
+            ? this.actual.messageBuffer
+            : (this.actual as ServerWrapper).session.consoleLog;
+        const view = (): string[] => buffer.slice(since);
 
         await this.pollAssertion(
             () => view().some(isMatch),
