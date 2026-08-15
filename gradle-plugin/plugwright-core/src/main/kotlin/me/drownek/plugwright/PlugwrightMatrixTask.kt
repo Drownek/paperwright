@@ -28,6 +28,8 @@ internal data class MatrixEnvironmentInput(
     val environmentConfig: Provider<ConfigNode>,
     val pluginConfigs: Provider<List<PluginRef>>,
     val journalFile: File?,
+    val runtimePackage: String? = null,
+    val runtimeExport: String? = null,
 )
 
 private data class EnvironmentSummary(val total: Int, val passed: Int, val failed: Int, val skipped: Int, val durationMs: Long)
@@ -124,6 +126,8 @@ abstract class PlugwrightMatrixTask : AbstractNodeTask() {
                 junitReportFile = env.junitReportFile,
                 pluginConfigs = env.pluginConfigs.get(),
                 journalFile = env.journalFile,
+                runtimePackage = env.runtimePackage,
+                runtimeExport = env.runtimeExport,
             )
             RunnerLauncher.writeConfig(entry)
             val cliJs = RunnerLauncher.resolveCliJs(env.testsDir)
@@ -159,7 +163,7 @@ abstract class PlugwrightMatrixTask : AbstractNodeTask() {
     private fun printSummaryTable(outcomes: List<Outcome>) {
         val nameWidth = outcomes.maxOf { it.env.name.length }
         logger.lifecycle("")
-        logger.lifecycle("Environment sumarries:")
+        logger.lifecycle("Environment summaries:")
         for ((env, summary, error) in outcomes) {
             val label = env.name.padEnd(nameWidth)
             val flag = if (env.allowFailure) "  [allowFailure]" else ""

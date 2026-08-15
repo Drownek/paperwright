@@ -152,6 +152,16 @@ class PlugwrightCorePlugin : Plugin<Project> {
                 extension.testsDir.map { it.asFile }, extension, defaultNodeInstallDir
             )
             val journalFilePath = project.layout.buildDirectory.file("plugwright/$envName-journal.jsonl").get().asFile
+            val modePackages = mode.runnerPackages(entry.spec)
+
+            // The package a mode names an export in is the one holding its environment factory.
+            // Only a third-party mode needs it written into the config; `local` and `external`
+            // are compiled into the runner, which resolves them by mode id.
+            val runtimeRef = if (mode.id == "local" || mode.id == "external") {
+                null
+            } else {
+                modePackages.firstOrNull { it.export != null }
+            }
 
             val testTask = ctx.registerWithoutAlias("Test", PlugwrightTestTask::class.java) {
                 doFirst {
@@ -169,13 +179,17 @@ class PlugwrightCorePlugin : Plugin<Project> {
                 nodeVersion.set(extension.nodeVersion)
                 downloadNode.set(extension.downloadNode)
                 nodeInstallDir.set(defaultNodeInstallDir)
+                runtimeRef?.let { ref ->
+                    runtimePackage.set(ref.name)
+                    ref.export?.let { runtimeExport.set(it) }
+                }
 
                 if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
                 if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
             }
 
             // Merged across environments so the whole matrix is covered by one install.
-            mode.runnerPackages(entry.spec).forEach { ref ->
+            modePackages.forEach { ref ->
                 runnerPackageSpecs += if (ref.version != null) "${ref.name}@${ref.version}" else ref.name
             }
 
@@ -218,6 +232,8 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     environmentConfig = environmentConfigProvider,
                     pluginConfigs = pluginConfigsProvider,
                     journalFile = journalFilePath,
+                    runtimePackage = runtimeRef?.name,
+                    runtimeExport = runtimeRef?.export,
                 )
                 ctx.prepareTaskRef?.let { matrixPrepareTasks += it }
             }
