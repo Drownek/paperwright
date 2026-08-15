@@ -303,6 +303,9 @@ export async function runPingSession(config: RunnerConfig = loadRunnerConfig()):
         console.log(pc.green('\nplugwrightPing: environment is reachable'));
     }
 
+    // Both: the unref'd timer only fires if something else is still holding the loop
+    // open (a lingering socket); process.exitCode carries the result when it isn't.
+    process.exitCode = exitCode;
     setTimeout(() => process.exit(exitCode), 500).unref();
 }
 
@@ -347,5 +350,8 @@ export async function runCleanupSession(config: RunnerConfig = loadRunnerConfig(
         await env.teardown();
     }
 
+    // Both: the unref'd timer only fires if something else is still holding the loop
+    // open (a lingering socket); process.exitCode carries the result when it isn't.
+    process.exitCode = exitCode;
     setTimeout(() => process.exit(exitCode), 500).unref();
 }

@@ -24,6 +24,11 @@ export function syntheticAccount(username: string): Account {
     return { username, auth: 'offline', justCreated: true };
 }
 
+/** An account as it sits in the pool: an [Account] whose password may still be a reference to
+ *  a secret rather than the secret itself. Once leased, the resolved password stays on the
+ *  entry, so a second lease of the same account doesn't re-read the environment. */
+type PooledEntry = Account & { secret?: SecretRef };
+
 export interface AccountsConfig {
     pool?: Array<{ username: string; password: SecretRef }>;
     autoRegister?: { usernamePattern: string; password: SecretRef; max: number } | null;
@@ -50,13 +55,16 @@ function formatUsername(pattern: string, n: number): string {
  * concurrently-connected bots would fight over.
  */
 export class AccountPool {
-    private readonly queue: Account[] = [];
+    /** Queue entries keep the secret *reference*: a run that never connects a bot — a
+     *  cleanup pass, a console-only ping — must not demand that the passwords be set. They
+     *  are resolved in [lease], where an unset variable is a real problem. */
+    private readonly queue: PooledEntry[] = [];
     private autoRegisterIssued = 0;
-    private readonly autoRegister: { usernamePattern: string; password: string; max: number } | null;
+    private readonly autoRegister: { usernamePattern: string; password: SecretRef; max: number } | null;
 
     constructor(config: AccountsConfig | null | undefined) {
         for (const entry of config?.pool ?? []) {
-            this.queue.push({ username: entry.username, password: resolveSecret(entry.password), auth: 'offline', justCreated: false });
+            this.queue.push({ username: entry.username, secret: entry.password, auth: 'offline', justCreated: false });
         }
         for (const username of config?.microsoft?.accounts ?? []) {
             this.queue.push({
@@ -69,20 +77,25 @@ export class AccountPool {
         this.autoRegister = config?.autoRegister
             ? {
                 usernamePattern: config.autoRegister.usernamePattern,
-                password: resolveSecret(config.autoRegister.password),
+                password: config.autoRegister.password,
                 max: config.autoRegister.max,
             }
             : null;
     }
 
     async lease(): Promise<Account> {
-        const account = this.queue.shift();
-        if (account) return account;
+        const entry = this.queue.shift();
+        if (entry) {
+            const { secret, ...account } = entry;
+            return secret && account.password === undefined
+                ? { ...account, password: resolveSecret(secret) }
+                : account;
+        }
 
         if (this.autoRegister && this.autoRegisterIssued < this.autoRegister.max) {
             this.autoRegisterIssued++;
             const username = formatUsername(this.autoRegister.usernamePattern, this.autoRegisterIssued);
-            return { username, password: this.autoRegister.password, auth: 'offline', justCreated: true };
+            return { username, password: resolveSecret(this.autoRegister.password), auth: 'offline', justCreated: true };
         }
 
         throw new Error(
