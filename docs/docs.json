@@ -35,6 +35,16 @@
           "api-reference",
           "examples"
         ]
+      },
+      {
+        "group": "Environments",
+        "pages": [
+          "environments",
+          "external-servers",
+          "plugins",
+          "reports",
+          "custom-modes"
+        ]
       }
     ]
   }

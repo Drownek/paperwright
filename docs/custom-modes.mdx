@@ -1,0 +1,165 @@
+---
+title: "Writing a Mode"
+description: "Teach Plugwright about a kind of server it doesn't ship support for."
+---
+
+`local` and `external` cover the two common cases: a server Plugwright owns, and one it doesn't. A mode of your own is for the cases in between — a Velocity proxy with backend servers, a Docker Compose stack, a server your company provisions through an internal API.
+
+A mode has two halves that version independently:
+
+- **Kotlin**, in the build: how the environment is declared and what has to happen before tests run.
+- **JavaScript**, in the runner: where the bots connect and what the environment can do.
+
+The build writes a config file; the runner reads it. Nothing else passes between them.
+
+## The Kotlin half
+
+Your module compiles against the API classes, which ship inside the published plugin jar:
+
+```kotlin
+// buildSrc, or a separate published module
+plugins { `kotlin-dsl` }
+
+dependencies {
+    compileOnly("io.github.drownek:plugwright-bundle:3.0.0")
+}
+```
+
+`compileOnly` on purpose. The plugin is already on the build's classpath at runtime, and a second copy is how you get a `NoSuchMethodError` that takes an afternoon to read.
+
+### The spec
+
+The spec is what a build script fills in. Use Gradle property types so laziness and the configuration cache keep working:
+
+```kotlin
+class VelocityEnvironmentSpec(
+    private val environmentName: String,
+    objects: ObjectFactory,
+) : EnvironmentSpec {
+
+    override fun getName() = environmentName
+
+    override val includeInMatrix: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    override val allowFailure: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    override val excludeTests: ListProperty<String> = objects.listProperty(String::class.java).convention(emptyList())
+
+    val composeFile: RegularFileProperty = objects.fileProperty()
+    val proxyPort: Property<Int> = objects.property(Int::class.java).convention(25577)
+}
+```
+
+### The mode
+
+```kotlin
+object VelocityMode : PlugwrightMode<VelocityEnvironmentSpec> {
+    override val id = "velocity"
+    override val specType = VelocityEnvironmentSpec::class.java
+
+    override fun createSpec(name: String, objects: ObjectFactory) =
+        VelocityEnvironmentSpec(name, objects)
+
+    override fun runnerPackages(spec: VelocityEnvironmentSpec) = listOf(
+        RunnerPackageRef("@acme/plugwright-velocity", "^1.0.0", export = "velocityEnvironment")
+    )
+
+    override fun validate(spec: VelocityEnvironmentSpec, ctx: ValidationContext) {
+        if (!spec.composeFile.isPresent) ctx.error("composeFile must be set")
+    }
+
+    override fun serialize(spec: VelocityEnvironmentSpec, node: ConfigNodeBuilder) {
+        node.put("proxyPort", spec.proxyPort.get())
+        node.put("composeFile", spec.composeFile.get().asFile.absolutePath)
+    }
+
+    override fun registerTasks(spec: VelocityEnvironmentSpec, ctx: TaskRegistrationContext) {
+        val up = ctx.register("Up", ComposeUpTask::class.java) {
+            composeFile.set(spec.composeFile)
+            pluginJar.set(ctx.projectPluginJar)
+        }
+        ctx.register("Down", ComposeDownTask::class.java) { composeFile.set(spec.composeFile) }
+        ctx.prepareTask(up)
+    }
+}
+```
+
+What each piece is for:
+
+- `id` lands in the config as `environment.mode` and names the mode in error messages.
+- `runnerPackages` is installed by `plugwrightCompileTests`, merged with every other environment's packages into one `npm install`. The first entry with an `export` becomes the runtime reference the runner loads the environment from, so name it there.
+- `validate` reports problems through the context instead of throwing. Every environment is validated before the build fails, so a script with three mistakes reports three, not the first.
+- `serialize` writes `environment.config` at configuration time. Secrets stay `SecretRef`s here — `node.put("password", spec.password.get())` writes a reference, not a password.
+- `registerTasks` adds tasks named `plugwright<Suffix><Environment>`, so `register("Up", ...)` in an environment called `proxy` gives `plugwrightUpProxy`. `prepareTask` marks the one that has to run before the tests do.
+
+Preparation belongs in a task rather than a callback. A callback executed inside someone else's `@TaskAction` drags your mode object into that task's state, breaks the configuration cache, and can never be run on its own. A task with declared inputs and outputs gets up-to-date checks and a name someone can type.
+
+If a config value needs something only a task can reach — the Java toolchain, a Gradle service — set it from `registerTasks` with `ctx.environmentConfig(provider)` instead of from `serialize`. That is what `LocalMode` does for the Java executable path.
+
+### Registering it
+
+```kotlin
+buildscript {
+    dependencies { classpath("com.acme:plugwright-velocity:1.0.0") }
+}
+
+plugwright {
+    registerMode(com.acme.VelocityMode)
+
+    environments {
+        create("proxy", com.acme.VelocityMode) {
+            composeFile.set(file("docker/compose.yml"))
+            proxyPort.set(25577)
+        }
+    }
+}
+```
+
+`create` is generic over the mode, so the block has your spec type as its receiver with no cast.
+
+## The JavaScript half
+
+The npm package named in `runnerPackages` exports a factory. It takes the `environment.config` object your `serialize` wrote and returns an `Environment`:
+
+```ts
+import type { Environment, EnvironmentCapabilities, BotConnectionOptions } from '@drownek/plugwright';
+
+export function velocityEnvironment(config: VelocityConfig): Environment {
+    return new VelocityEnvironment(config);
+}
+
+class VelocityEnvironment implements Environment {
+    readonly id = 'velocity';
+    readonly capabilities: EnvironmentCapabilities = {
+        console: true,
+        consoleOutput: 'responses',
+        op: true,
+        freshState: false,
+        arbitraryUsernames: true,
+        lifecycle: true,
+        cleanupStrategy: 'compensating',
+    };
+
+    async setup(session: Session): Promise<void> { /* connect, probe, warm up */ }
+    connection(): BotConnectionOptions { /* host, port, version, auth */ }
+    console(): ServerConsole | null { /* the channel tests run commands through */ }
+    accounts(): AccountPool | null { return null; }   // optional
+    async beforeJoin(): Promise<void> { /* throttle, if the server needs it */ }
+    async teardown(): Promise<void> { /* disconnect, stop what you started */ }
+}
+```
+
+Capabilities are a promise the runner holds you to. Tests declaring `requires: ['op']` are skipped when you report `op: false`, so report what is true after `setup()` rather than what the build script hoped for. `consoleOutput` is three-valued (`full`, `responses`, `none`) because a console that answers its own commands still cannot show a test the server log.
+
+`accounts()` and `beforeJoin()` are optional. Returning no pool means every bot gets a throwaway `Test_<uuid>` username, which is what `local` does.
+
+## Checking it works
+
+```bash
+./gradlew plugwrightTestProxy --info
+cat build/tmp/plugwright/proxy.json
+```
+
+The config file is the contract between the two halves, and reading it answers most of the questions that come up while a mode is half-written. If the runner says the mode is one it "cannot run yet", the runtime reference is missing — check that a `RunnerPackageRef` in `runnerPackages` names an `export`.
+
+## Versioning
+
+`PlugwrightMode.apiVersion` defaults to the API version your module compiled against, and Plugwright refuses to load a mode whose version it doesn't understand. On the runner side, `RunnerPackageRef` carries an npm range for the same reason: the Kotlin module and the npm package are released separately, and the pair has to agree.

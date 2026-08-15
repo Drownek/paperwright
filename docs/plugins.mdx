@@ -1,0 +1,154 @@
+---
+title: "Runner Plugins"
+description: "Hooks, fixtures, matchers and inherited tests, without touching the test engine."
+---
+
+A runner plugin extends what happens around your tests. Logging in through AuthMe, adding an `expect(player).toHaveBalance(100)` matcher, resetting state between tests on a shared stand, shipping a suite of tests that any server running your plugin should pass — all of that is a plugin, and none of it requires the test engine to know about it.
+
+Plugins are declared per environment:
+
+```kotlin
+create("staging", ExternalMode) {
+    plugins {
+        npm("@plugwright/auth-authme") {
+            options["loginCommand"] = "/log"
+        }
+        local(file("src/test/e2e/dist/plugins/staging.js")) {
+            inheritTests = false
+        }
+    }
+}
+```
+
+`npm(...)` names a published package, installed by `plugwrightCompileTests` along with the rest of the environment's packages. `local(...)` points at a compiled file in your own test project. Options are plain strings — anything secret belongs in `accounts { }`, where it stays a secret reference.
+
+`LocalMode` takes the same block. A local server running an authentication plugin needs the login hook exactly as much as a remote one does.
+
+## What a plugin can do
+
+```ts
+export interface PlugwrightPlugin<O = unknown> {
+    name: string;
+    apiVersion?: number;
+    setup?(ctx: { session, env, options: O }): Promise<void> | void;
+    onPlayerCreate?(player, ctx: { account, env }): Promise<void> | void;
+    beforeEach?(ctx: TestContext): Promise<void> | void;
+    afterEach?(ctx: TestContext): Promise<void> | void;
+    extendContext?(ctx: TestContext): Record<string, unknown> | void;
+    matchers?: Record<string, MatcherFn>;
+    tests?: Array<{ file: string; mode: 'preflight' | 'suite' }>;
+    cleanup?(ctx: { session, scope: 'session' | 'manual' }): Promise<void> | void;
+    teardown?(): Promise<void> | void;
+}
+```
+
+Order over one run:
+
+```
+env.setup() → console probe → load plugins → register matchers → plugins.setup()
+  → preflight tests            (a failure here aborts the run)
+  → user specs + suite tests
+      per test: lease account → connect → onPlayerCreate → beforeEach
+                → body → cleanup finalizers → afterEach → return account
+  → reports → cleanup('session') → teardown() → env.teardown()
+```
+
+Matchers are merged into the shared prototype before the first spec file is imported. That ordering is not incidental: `expect(x).toHaveBalance()` looks the matcher up when it is called, but the spec file has to typecheck and import first.
+
+## Authentication is a hook, not a test
+
+```ts
+import { definePlugin, poll } from '@drownek/plugwright';
+
+export default definePlugin({
+    name: 'authme',
+    async onPlayerCreate(player, { account }) {
+        if (account.auth === 'microsoft') return;
+        // wait for the prompt, answer it, wait for the confirmation
+    },
+});
+```
+
+`onPlayerCreate` fires on every connection: the first bot of a test, a second bot from `createPlayer()`, every `player.rejoin()`, and the admin-bot console channel. A "log in first" test fires once, in whatever order the spec files happen to load, and leaves every other connection unauthenticated. If you want the visible reassurance of a login test in the report, ship one as a `preflight` test alongside the hook.
+
+## Inherited tests
+
+```ts
+tests: [
+    { file: join(__dirname, 'auth.spec.js'), mode: 'preflight' },
+    { file: join(__dirname, 'economy.spec.js'), mode: 'suite' },
+]
+```
+
+`preflight` tests run before any user spec and abort the run when they fail — there is no point testing a shop when nobody can log in. `suite` tests run alongside your own and are tagged with the plugin's name in the report.
+
+Spec discovery skips `node_modules`, so this is the only way a packaged test ever runs. Per-plugin, `inheritTests = false` loads the hooks and matchers without the tests.
+
+## Fixtures
+
+`extendContext` adds fields to the object every test destructures:
+
+```ts
+extendContext(ctx) {
+    return { auth: new AuthApi(ctx.player) };
+}
+```
+
+```ts
+declare module '@drownek/plugwright' {
+    interface TestContext {
+        auth: AuthApi;
+    }
+}
+```
+
+The declaration merging block is what gives you types and autocompletion at the call site. Without it the fixture still works, and TypeScript still complains.
+
+## Matchers
+
+```ts
+matchers: {
+    async toHaveBalance(this: any, expected: number) {
+        await this.pollAssertion(
+            () => currentBalance(this.actual) === expected,
+            () => `Expected NOT to have balance ${expected}`,
+            () => `Expected balance ${expected}, got ${currentBalance(this.actual)}`,
+        );
+    },
+}
+```
+
+Anything that reads the server log has to check the console output level first, because a console that only answers its own commands leaves that buffer empty. See [External Servers](/external-servers).
+
+## Versioning
+
+```ts
+export default definePlugin({ name: 'authme', apiVersion: 1 });
+```
+
+A plugin built against a newer contract than the runner supports fails to load with a message saying so. Leaving `apiVersion` unset skips the check.
+
+## Writing one
+
+A plugin is an npm package (or a single compiled file) whose default export implements the interface:
+
+```ts
+import { definePlugin } from '@drownek/plugwright';
+
+export default definePlugin<{ resetCommand?: string }>({
+    name: 'staging-reset',
+
+    setup({ options }) {
+        resetCommand = options.resetCommand ?? '/pw reset';
+    },
+
+    async beforeEach({ player, server }) {
+        if (!server.session.env.capabilities.console) return;
+        await server.executeAndWait(`minecraft:clear ${player.username}`);
+    },
+});
+```
+
+`definePlugin` is an identity function; it exists so TypeScript infers your options type at the definition site. Depend on `@drownek/plugwright` as a peer dependency, ship compiled JavaScript, and point `main` at it.
+
+`@plugwright/auth-authme` in this repository is a complete, working example: a hook, an options interface, a preflight test, and a README.
