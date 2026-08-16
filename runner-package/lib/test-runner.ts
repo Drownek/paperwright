@@ -8,6 +8,7 @@ import type { Account, AccountPool } from './account.js';
 import type { Session } from './session.js';
 import type { PluginHost } from './plugin-host.js';
 import type { BotConnectionOptions } from './environment.js';
+import { reuseTestRegistry } from './test-registry.js';
 import type { TestCase } from './test-registry.js';
 import type { TestContext, TestResult } from './types.js';
 import type { ConnectedPlayer, ReuseOptions } from './player-registry.js';
@@ -34,6 +35,10 @@ export interface RunTestCaseParams {
      *  connection for every test in the file regardless of `reuseEnabled` or the test's own
      *  `reuse` option. */
     forceReuseOff?: boolean;
+    /** Reports a `reuseTest`'s own result, whenever one runs as a dependency of this test case.
+     *  Called before `runTestCase` resolves, so the caller can append it to the report ahead of
+     *  the test case's own result. */
+    onExtraResult?: (result: TestResult) => void;
 }
 
 /** Normalizes a `TestOptions.reuse` value to what `PlayerRegistry.resolve` takes. */
@@ -53,7 +58,7 @@ function normalizeReuse(reuse: false | string | ReuseOptions | undefined): false
  * behavior.
  */
 export async function runTestCase(params: RunTestCaseParams): Promise<TestResult> {
-    const { file, testCase, session, plugins, connOpts, timeoutMs, pluginName = null, reuseEnabled = false, reuseStay = true, forceReuseOff = false } = params;
+    const { file, testCase, session, plugins, connOpts, timeoutMs, pluginName = null, reuseEnabled = false, reuseStay = true, forceReuseOff = false, onExtraResult } = params;
 
     console.log(`  ${pc.bold(`Test: ${testCase.name}`)}`);
     session.consoleLog.clear();
@@ -112,6 +117,65 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
         }
     };
 
+    /** Runs the `reuseTest` registered for `poolKey`, if any — called by `PlayerRegistry` right
+     *  after it (re)connects that pool's player, before handing it to the test that triggered
+     *  the (re)connect. Reported as its own test via `onExtraResult`; a throw here fails that
+     *  dependent test too (see `PlayerRegistry.createEntry`, which discards the entry on
+     *  failure so the next attempt runs this again instead of reusing a half-set-up player). */
+    const runReuseTestCase = async (poolKey: string, reusePlayer: PlayerWrapper): Promise<void> => {
+        const reuseCase = reuseTestRegistry.get(poolKey);
+        if (!reuseCase) return;
+
+        console.log(`  ${pc.bold(`Test: ${reuseCase.name}`)}`);
+        const reuseAbort = new AbortController();
+        const reuseFinalizers: Array<() => void | Promise<void>> = [];
+        const reuseCtx: TestContext = {
+            player: reusePlayer,
+            server,
+            createPlayer,
+            invalidatePlayer: (p: PlayerWrapper) => { invalidated.add(p); },
+            signal: reuseAbort.signal,
+            cleanup: (fn: () => void | Promise<void>) => { reuseFinalizers.push(fn); },
+        };
+        plugins.extendContext(reuseCtx);
+
+        const start = Date.now();
+        let timeoutHandle: ReturnType<typeof setTimeout>;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+                reuseAbort.abort();
+                reject(new Error(`reuseTest "${poolKey}" timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+        });
+
+        const body = (async (): Promise<void> => {
+            try {
+                await reuseCase.fn(reuseCtx);
+            } finally {
+                for (const finalizer of [...reuseFinalizers].reverse()) {
+                    try {
+                        await finalizer();
+                    } catch (e) {
+                        console.error(pc.red(`[cleanup] reuseTest "${poolKey}" finalizer error: ${(e as Error).message}`));
+                    }
+                }
+            }
+        })().finally(() => clearTimeout(timeoutHandle));
+
+        try {
+            await Promise.race([body, timeoutPromise]);
+            const durationMs = Date.now() - start;
+            console.log(`    ${pc.green(pc.bold('PASSED'))} ${pc.dim(`(${formatDuration(durationMs)})`)}\n`);
+            onExtraResult?.({ file, testName: reuseCase.name, passed: true, durationMs, plugin: pluginName });
+        } catch (error) {
+            const durationMs = Date.now() - start;
+            const errorMsg = (error as Error).message;
+            console.log(`    ${pc.red(pc.bold('FAILED'))} ${pc.dim(`(${formatDuration(durationMs)})`)}: ${pc.red(errorMsg)}\n`);
+            onExtraResult?.({ file, testName: reuseCase.name, passed: false, durationMs, error: error as Error, plugin: pluginName });
+            throw error;
+        }
+    };
+
     /** `ctx.player` and `ctx.createPlayer` both funnel through here. `usernameOverride` is
      *  `createPlayer({ username })` — a specific identity, which always bypasses both the
      *  account pool and the registry, same as before reuse existed. */
@@ -131,7 +195,11 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
             return { player, key: null, reused: false };
         }
 
-        const result = await session.players.resolve(normalized, () => connectNewPlayer());
+        const result = await session.players.resolve(
+            normalized,
+            () => connectNewPlayer(),
+            normalized.key ? (key, p) => runReuseTestCase(key, p) : undefined,
+        );
         registryPlayers.push({ player: result.player, stay: stayFor(normalized) });
 
         if (result.reused) {
@@ -152,10 +220,27 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
         return player;
     };
 
-    const { player, key: primaryKey, reused: primaryReused } = await resolvePlayer(undefined, testCase.reuse);
-    if (primaryKey !== null) {
-        const normalized = normalizeReuse(testCase.reuse);
-        primaryReuse = { key: primaryKey, reused: primaryReused, stay: stayFor(normalized === false ? {} : normalized) };
+    const testStartTime = Date.now();
+
+    let player: PlayerWrapper;
+    try {
+        const resolved = await resolvePlayer(undefined, testCase.reuse);
+        player = resolved.player;
+        if (resolved.key !== null) {
+            const normalized = normalizeReuse(testCase.reuse);
+            primaryReuse = { key: resolved.key, reused: resolved.reused, stay: stayFor(normalized === false ? {} : normalized) };
+        }
+    } catch (error) {
+        // The player never resolved — most likely this test's `reuseTest` dependency just
+        // failed (see `runReuseTestCase`) and `PlayerRegistry` already discarded the half-built
+        // entry. Reported as this test failing too, same as any other dependency failure.
+        const durationMs = Date.now() - testStartTime;
+        const errorMsg = (error as Error).message;
+        console.log(`    ${pc.red(pc.bold('FAILED'))} ${pc.dim(`(${formatDuration(durationMs)})`)}: ${pc.red(errorMsg)}\n`);
+        return {
+            file, testName: testCase.name, passed: false, durationMs, error: error as Error, plugin: pluginName,
+            reuse: reuseEnabled ? { key: 'none', reused: false, stay: false, abilities: [] } : undefined,
+        };
     }
     const abortController = new AbortController();
 
@@ -170,7 +255,6 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
 
     plugins.extendContext(ctx);
 
-    const testStartTime = Date.now();
     let testPassed = false;
 
     try {

@@ -28,7 +28,7 @@ installSourceMapSupport();
 export { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator };
 export { PlayerWrapper };
 export { ServerWrapper } from './lib/server.js';
-export { test, opTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
+export { test, opTest, reuseTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
 export type { TestOptions, TestCase } from './lib/test-registry.js';
 export { expect } from './lib/matchers.js';
 export { loadRunnerConfig, resolveSecret, isSecretRef } from './lib/config.js';
@@ -213,6 +213,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
                 const result = await runTestCase({
                     file, testCase, session, plugins, connOpts, timeoutMs, pluginName,
                     reuseEnabled: reuse.enabled, reuseStay: reuse.stay, forceReuseOff,
+                    onExtraResult: r => testResults.push(r),
                 });
                 testResults.push(result);
             }
