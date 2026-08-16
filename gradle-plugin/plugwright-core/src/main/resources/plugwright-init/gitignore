@@ -1,0 +1,6 @@
+# Installed by plugwrightCompileTests
+node_modules/
+# Compiled specs and plugins
+dist/
+# Whatever the environments write while they run: servers, worlds, logs
+generated/
