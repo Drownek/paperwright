@@ -57,6 +57,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
             testsDir.set(extension.testsDir)
             // Filled in once every environment has been wired; empty until then.
             runnerPackages.convention(emptyList())
+            npmConfig.set(project.provider { extension.npm.toConfig() })
             nodeVersion.set(extension.nodeVersion)
             downloadNode.set(extension.downloadNode)
             nodeInstallDir.set(defaultNodeInstallDir)
@@ -137,6 +138,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
         val layout = PlugwrightLayout.of(extension.testsDir.get().asFile)
         val projectPluginJarProvider = resolveProjectPluginJar(project, extension)
         val validationProblems = mutableListOf<String>()
+        validationProblems += extension.npm.toConfig().problems().map { "[npm] $it" }
         val reportsDir = project.layout.buildDirectory.dir("reports/plugwright")
 
         // -Pplugwright.env=a,b narrows the matrix; ignored by direct plugwrightTest<Env> calls.
