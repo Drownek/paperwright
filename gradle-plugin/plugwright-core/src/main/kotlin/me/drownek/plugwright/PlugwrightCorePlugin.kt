@@ -147,7 +147,26 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
         val matrixEntries = mutableListOf<MatrixEnvironmentInput>()
         val matrixPrepareTasks = mutableListOf<TaskProvider<out Task>>()
-        val runnerPackageSpecs = linkedSetOf<String>()
+        // Keyed by package name rather than by the whole spec: a mode names a package with the
+        // version it needs, and the same build script names it again — bare — in that
+        // environment's plugins { npm(...) }. Both specs in one `npm install` is a package
+        // asked for twice at two different versions, and the bare one resolves "latest",
+        // which a package released only under another tag does not have.
+        val runnerPackageSpecs = linkedMapOf<String, String>()
+        fun addRunnerPackage(spec: String) {
+            val name = npmPackageNameOf(spec)
+            val existing = runnerPackageSpecs[name]
+            when {
+                // A version beats no version; between two versions the mode's comes first and
+                // wins, because it is the half that knows what its own export needs.
+                existing == null || existing == name -> runnerPackageSpecs[name] = spec
+                spec == name || spec == existing -> Unit
+                else -> project.logger.warn(
+                    "plugwright: $name is asked for as both '$existing' and '$spec'. Installing " +
+                        "'$existing'; drop the version from one of them to say which you meant."
+                )
+            }
+        }
 
         extension.environments.all.forEach { entry ->
             val envName = entry.spec.name
@@ -198,7 +217,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
             // Merged across environments so the whole matrix is covered by one install.
             modePackages.forEach { ref ->
-                runnerPackageSpecs += if (ref.version != null) "${ref.name}@${ref.version}" else ref.name
+                addRunnerPackage(if (ref.version != null) "${ref.name}@${ref.version}" else ref.name)
             }
 
             val validation = ValidationContextImpl(envName, project.logger)
@@ -217,7 +236,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
             pluginConfigsProvider.get()
                 .map { it.specifier }
                 .filter { isNpmPackageName(it) }
-                .forEach { runnerPackageSpecs += it }
+                .forEach { addRunnerPackage(it) }
 
             testTask.configure {
                 ctx.prepareTaskRef?.let { dependsOn(it) }
@@ -247,7 +266,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
             }
         }
 
-        plugwrightCompileTests.configure { runnerPackages.set(runnerPackageSpecs.toList()) }
+        plugwrightCompileTests.configure { runnerPackages.set(runnerPackageSpecs.values.toList()) }
 
         if (validationProblems.isNotEmpty()) {
             throw GradleException("plugwright configuration problems:\n" + validationProblems.joinToString("\n") { "  $it" })
@@ -276,6 +295,13 @@ class PlugwrightCorePlugin : Plugin<Project> {
         if (!ref.specifier.startsWith(PluginRef.WORKSPACE_SCHEME)) return ref
         val name = ref.specifier.removePrefix(PluginRef.WORKSPACE_SCHEME)
         return ref.copy(specifier = File(layout.compiledPluginsDir, "$name.js").absolutePath)
+    }
+
+    /** `@scope/name@^1.0.0` → `@scope/name`; the version separator is the last `@`, which for
+     *  a scoped package is never the leading one. */
+    private fun npmPackageNameOf(spec: String): String {
+        val separator = spec.lastIndexOf('@')
+        return if (separator > 0) spec.substring(0, separator) else spec
     }
 
     /** Whether a plugin specifier names an npm package rather than a file in the project.
