@@ -52,7 +52,7 @@ abstract class PlugwrightCleanupTask : AbstractNodeTask() {
             environmentName = environmentName.get(),
             modeId = modeId.get(),
             environmentConfig = environmentConfig.get(),
-            testsDir = userTestsDirectory,
+            workspaceDir = userTestsDirectory,
             configFile = configFile.get().asFile,
             testFiles = null,
             testNames = null,

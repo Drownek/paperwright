@@ -32,7 +32,17 @@ class PluginsSpec {
         entries.add(PluginRef(specifier, spec.options, spec.inheritTests))
     }
 
-    /** A plugin living as a file in the test project, e.g. under `src/test/e2e`. */
+    /**
+     * A plugin written in the workspace's `plugins` directory, named without its extension:
+     * `local("stand-reset")` loads what `plugins/stand-reset.ts` compiles into.
+     */
+    fun local(name: String, action: PluginRefSpec.() -> Unit = {}) {
+        val spec = PluginRefSpec().apply(action)
+        entries.add(PluginRef(PluginRef.WORKSPACE_SCHEME + name, spec.options, spec.inheritTests))
+    }
+
+    /** A plugin at a path of your own choosing. Prefer [local] with a name: it follows the
+     *  workspace layout, so the path stops being something the build script has to know. */
     fun local(file: File, action: PluginRefSpec.() -> Unit = {}) {
         val spec = PluginRefSpec().apply(action)
         entries.add(PluginRef(file.absolutePath, spec.options, spec.inheritTests))

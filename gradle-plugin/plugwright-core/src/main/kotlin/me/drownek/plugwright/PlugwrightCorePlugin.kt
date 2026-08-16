@@ -1,6 +1,8 @@
 package me.drownek.plugwright
 
 import me.drownek.plugwright.api.ConfigNodeBuilder
+import me.drownek.plugwright.api.PluginRef
+import me.drownek.plugwright.api.PlugwrightLayout
 import org.gradle.api.GradleException
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.Plugin
@@ -132,6 +134,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
             )
         }
 
+        val layout = PlugwrightLayout.of(extension.testsDir.get().asFile)
         val projectPluginJarProvider = resolveProjectPluginJar(project, extension)
         val validationProblems = mutableListOf<String>()
         val reportsDir = project.layout.buildDirectory.dir("reports/plugwright")
@@ -147,9 +150,12 @@ class PlugwrightCorePlugin : Plugin<Project> {
         extension.environments.all.forEach { entry ->
             val envName = entry.spec.name
             val mode = entry.mode.erased()
+            // Before validation and registerTasks: a mode fills in what it can derive from
+            // the layout here, and both of those already expect a complete spec.
+            mode.applyLayoutDefaults(entry.spec, layout)
             val ctx = TaskRegistrationContextImpl(
                 project, envName, envName == primaryName, projectPluginJarProvider,
-                extension.testsDir.map { it.asFile }, extension, defaultNodeInstallDir
+                extension.testsDir.map { it.asFile }, layout, extension, defaultNodeInstallDir
             )
             val journalFilePath = project.layout.buildDirectory.file("plugwright/$envName-journal.jsonl").get().asFile
             val modePackages = mode.runnerPackages(entry.spec)
@@ -201,8 +207,8 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
             val environmentConfigProvider = ctx.environmentConfigProvider
                 ?: project.provider { ConfigNodeBuilder().apply { mode.serialize(entry.spec, this) }.build() }
-            val pluginConfigsProvider = ctx.pluginConfigsProvider
-                ?: project.provider { emptyList() }
+            val pluginConfigsProvider = (ctx.pluginConfigsProvider ?: project.provider { emptyList<PluginRef>() })
+                .map { refs -> refs.map { resolveWorkspacePlugin(it, layout) } }
 
             // A plugin declared by npm name is installed alongside the environment's own
             // runner packages; a plugin given as a path is already in the project.
@@ -223,7 +229,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     name = envName,
                     modeId = mode.id,
                     allowFailure = entry.spec.allowFailure.get(),
-                    testsDir = extension.testsDir.get().asFile,
+                    workspaceDir = layout.workspaceDir,
                     configFile = project.layout.buildDirectory.file("tmp/plugwright/$envName.json").get().asFile,
                     jsonReportFile = File(reportsDirFile, "$envName.json"),
                     junitReportFile = File(File(reportsDirFile, "junit"), "$envName.xml"),
@@ -260,6 +266,14 @@ class PlugwrightCorePlugin : Plugin<Project> {
             if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
             if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
         }
+    }
+
+    /** Turns `plugins { local("stand-reset") }` into the path the compiler writes it to.
+     *  Anything else — an npm name, a path the build script spelled out — passes through. */
+    private fun resolveWorkspacePlugin(ref: PluginRef, layout: PlugwrightLayout): PluginRef {
+        if (!ref.specifier.startsWith(PluginRef.WORKSPACE_SCHEME)) return ref
+        val name = ref.specifier.removePrefix(PluginRef.WORKSPACE_SCHEME)
+        return ref.copy(specifier = File(layout.compiledPluginsDir, "$name.js").absolutePath)
     }
 
     /** Whether a plugin specifier names an npm package rather than a file in the project.

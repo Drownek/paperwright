@@ -73,10 +73,13 @@ abstract class PlugwrightExtension(project: Project) : LegacyEnvironmentProperti
     @Deprecated("Use environments { create(\"local\", LocalMode) { acceptEula.set(...) } }")
     override val acceptEula: Property<Boolean> = project.objects.property(Boolean::class.java).convention(true)
 
+    /**
+     * Left unset on purpose: an absent value is what tells the local mode to place the server
+     * under `<testsDir>/generated/<environment>/run`. Setting it here is still honoured, and
+     * still means "this exact directory".
+     */
     @Deprecated("Use environments { create(\"local\", LocalMode) { runDir.set(...) } }")
-    override val runDir: DirectoryProperty = project.objects.directoryProperty().convention(
-        project.layout.projectDirectory.dir("run")
-    )
+    override val runDir: DirectoryProperty = project.objects.directoryProperty()
 
     @Deprecated("Use environments { create(\"local\", LocalMode) { cleanExcludePatterns.set(...) } }")
     override val cleanExcludePatterns: ListProperty<String> = project.objects.listProperty(String::class.java).convention(

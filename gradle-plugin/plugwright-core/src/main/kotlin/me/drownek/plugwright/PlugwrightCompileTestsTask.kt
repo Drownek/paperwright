@@ -1,23 +1,39 @@
 package me.drownek.plugwright
 
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import me.drownek.plugwright.api.PlugwrightLayout
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputDirectory
-import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 import java.io.File
+import java.io.StringReader
 
 /**
- * Installs the test project's npm dependencies and compiles its TypeScript.
+ * Installs the workspace's npm dependencies and compiles its TypeScript.
+ *
+ * Sources live in two directories — `tests` for specs, `plugins` for runner plugins — and
+ * `tsc` mirrors both into `dist`. A workspace still holding its specs at the root (the layout
+ * before `tests` existed) is moved into place the first time this task runs.
  *
  * Split out of the test task so several environments share one install and one `tsc`
  * run instead of paying for them per environment.
  */
 abstract class PlugwrightCompileTestsTask : AbstractNodeTask() {
 
-    @get:InputDirectory
-    @get:Optional
+    /**
+     * Root of the npm project: `plugwright.testsDir`.
+     *
+     * Not declared as an input directory: the task never reports itself up to date, and the
+     * workspace holds `node_modules` and a running server's `generated` directory — fingerprinting
+     * either of those costs seconds and decides nothing.
+     */
+    @get:Internal
     abstract val testsDir: DirectoryProperty
 
     /**
@@ -39,45 +55,154 @@ abstract class PlugwrightCompileTestsTask : AbstractNodeTask() {
 
     @TaskAction
     fun compile() {
-        val userTestsDirectory = if (testsDir.isPresent) {
+        val workspace = if (testsDir.isPresent) {
             testsDir.get().asFile
         } else {
             logger.warn("Tests directory not configured")
             return
         }
 
-        if (!userTestsDirectory.exists()) {
-            logger.warn("Tests directory does not exist: ${userTestsDirectory.absolutePath}")
+        if (!workspace.exists()) {
+            logger.warn("Tests directory does not exist: ${workspace.absolutePath}")
             return
         }
+
+        val layout = PlugwrightLayout.of(workspace)
+        migrateRootLevelSpecs(layout)
 
         val nodePaths = resolveNode()
         val npmEnv = nodePathEnv(nodePaths)
 
         // Install dependencies if needed
-        if (!File(userTestsDirectory, "node_modules").exists()) {
+        if (!File(workspace, "node_modules").exists()) {
             logger.lifecycle("Installing Node.js dependencies...")
-            runCommand(userTestsDirectory, nodePaths.npm, "install", env = npmEnv)
+            runCommand(workspace, nodePaths.npm, "install", env = npmEnv)
         }
 
-        installMissingRunnerPackages(userTestsDirectory, nodePaths, npmEnv)
+        installMissingRunnerPackages(workspace, nodePaths, npmEnv)
 
         // Build TypeScript tests if tsconfig.json exists
-        val tsconfigFile = File(userTestsDirectory, "tsconfig.json")
+        val tsconfigFile = File(workspace, "tsconfig.json")
         if (tsconfigFile.exists()) {
             logger.lifecycle("TypeScript config found, compiling tests...")
-            runCommand(userTestsDirectory, nodePaths.npm, "run", "build", env = npmEnv)
+            runCommand(workspace, nodePaths.npm, "run", "build", env = npmEnv)
         } else {
             logger.lifecycle("No TypeScript config found, running JavaScript tests directly")
         }
     }
 
+    // ---- Migration -------------------------------------------------------------------
+
+    /**
+     * Moves a workspace laid out the old way — specs anywhere under the root — into `tests`.
+     *
+     * Runs only while there is no `tests` directory at all, so it happens once and never
+     * touches a workspace that already follows the layout. The `tsconfig.json` goes along
+     * with the files: its `include` still describes where the specs used to be.
+     */
+    private fun migrateRootLevelSpecs(layout: PlugwrightLayout) {
+        if (layout.testsDir.exists()) return
+
+        val strays = findSpecSources(layout.workspaceDir, layout)
+        if (strays.isEmpty()) return
+
+        strays.forEach { source ->
+            val destination = File(layout.testsDir, source.relativeTo(layout.workspaceDir).path)
+            destination.parentFile.mkdirs()
+            if (!source.renameTo(destination)) {
+                source.copyTo(destination, overwrite = true)
+                source.delete()
+            }
+        }
+        removeEmptyDirectories(layout.workspaceDir, layout)
+
+        logger.lifecycle(
+            "Moved ${strays.size} spec file(s) into ${layout.testsDir.absolutePath} — " +
+                "plugwright looks for specs under 'tests' now."
+        )
+        retargetTsConfig(layout)
+    }
+
+    /** Spec files outside the directories the layout owns; empty for a workspace that has
+     *  already been migrated or was created by `plugwrightInit`. */
+    private fun findSpecSources(directory: File, layout: PlugwrightLayout): List<File> {
+        val children = directory.listFiles() ?: return emptyList()
+        return children.flatMap { child ->
+            when {
+                child.isDirectory && isIgnoredDirectory(child, layout) -> emptyList()
+                child.isDirectory -> findSpecSources(child, layout)
+                child.name.endsWith(".spec.ts") || child.name.endsWith(".spec.js") -> listOf(child)
+                else -> emptyList()
+            }
+        }
+    }
+
+    private fun isIgnoredDirectory(directory: File, layout: PlugwrightLayout): Boolean =
+        directory.name == "node_modules" || directory.name == ".git" ||
+            directory == layout.compiledDir || directory == layout.generatedRootDir ||
+            directory == layout.pluginsDir || directory == layout.testsDir
+
+    private fun removeEmptyDirectories(directory: File, layout: PlugwrightLayout) {
+        val children = directory.listFiles() ?: return
+        children.filter { it.isDirectory && !isIgnoredDirectory(it, layout) }.forEach { child ->
+            removeEmptyDirectories(child, layout)
+            if (child.list()?.isEmpty() == true) child.delete()
+        }
+    }
+
+    /**
+     * Points a migrated workspace's `tsconfig.json` at the directories the sources now live
+     * in, and at the `dist` that mirrors them.
+     *
+     * A config the parser chokes on (comments are legal in `tsconfig.json`, and JSON says
+     * otherwise) is left alone with an explanation — a rewrite that drops the comments is a
+     * worse outcome than an edit by hand.
+     */
+    private fun retargetTsConfig(layout: PlugwrightLayout) {
+        val tsconfigFile = File(layout.workspaceDir, "tsconfig.json")
+        if (!tsconfigFile.exists()) return
+
+        val config = try {
+            JsonParser.parseReader(JsonReader(StringReader(tsconfigFile.readText())).apply { isLenient = true })
+                .asJsonObject
+        } catch (e: Exception) {
+            logger.warn(
+                "Could not update ${tsconfigFile.absolutePath} (${e.message}). Point its \"include\" at " +
+                    "\"tests/**/*.ts\" and \"plugins/**/*.ts\" by hand."
+            )
+            return
+        }
+
+        val compilerOptions = config.getAsJsonObject("compilerOptions") ?: JsonObject().also {
+            config.add("compilerOptions", it)
+        }
+        compilerOptions.addProperty("rootDir", ".")
+        compilerOptions.addProperty("outDir", "./${PlugwrightLayout.COMPILED_DIR_NAME}")
+        config.add("include", jsonArrayOf(
+            "${PlugwrightLayout.TESTS_DIR_NAME}/**/*.ts",
+            "${PlugwrightLayout.PLUGINS_DIR_NAME}/**/*.ts",
+        ))
+        config.add("exclude", jsonArrayOf(
+            "node_modules",
+            PlugwrightLayout.COMPILED_DIR_NAME,
+            PlugwrightLayout.GENERATED_DIR_NAME,
+        ))
+
+        tsconfigFile.writeText(GsonBuilder().setPrettyPrinting().create().toJson(config) + "\n")
+        logger.lifecycle("Updated ${tsconfigFile.absolutePath} for the new layout")
+    }
+
+    private fun jsonArrayOf(vararg values: String): JsonArray =
+        JsonArray().apply { values.forEach { add(it) } }
+
+    // ---- npm -------------------------------------------------------------------------
+
     private fun installMissingRunnerPackages(
-        testsDirectory: File,
+        workspace: File,
         nodePaths: NodeManager.NodePaths,
         npmEnv: Map<String, String>
     ) {
-        val nodeModules = File(testsDirectory, "node_modules")
+        val nodeModules = File(workspace, "node_modules")
         val missing = runnerPackages.get().filterNot { spec ->
             File(nodeModules, packageNameOf(spec)).exists()
         }
@@ -87,7 +212,7 @@ abstract class PlugwrightCompileTestsTask : AbstractNodeTask() {
         try {
             // --no-save: these come from the build script's environments, so the test project's
             // package.json shouldn't grow a second, drifting copy of the same decision.
-            runCommand(testsDirectory, nodePaths.npm, "install", "--no-save", *missing.toTypedArray(), env = npmEnv)
+            runCommand(workspace, nodePaths.npm, "install", "--no-save", *missing.toTypedArray(), env = npmEnv)
         } catch (e: Exception) {
             // A package that can't be installed is not a reason to stop compiling the tests:
             // only the environment that asked for it is affected, and the runner reports the

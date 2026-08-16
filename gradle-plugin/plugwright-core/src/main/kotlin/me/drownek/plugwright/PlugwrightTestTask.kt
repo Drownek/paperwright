@@ -18,8 +18,14 @@ import java.io.File
  */
 abstract class PlugwrightTestTask : AbstractNodeTask() {
 
-    @get:InputDirectory
-    @get:Optional
+    /**
+     * Root of the npm project: `plugwright.testsDir`. The runner is pointed at the compiled
+     * specs inside it — see [RunnerLauncher.writeConfig].
+     *
+     * Not an input directory, for the same reason as in [PlugwrightCompileTestsTask]: this
+     * task always runs, and the workspace now contains the server's own generated files.
+     */
+    @get:Internal
     abstract val testsDir: DirectoryProperty
 
     @get:Input
@@ -94,15 +100,15 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
     fun runTests() {
         val nodePaths = resolveNode()
 
-        val userTestsDirectory = if (testsDir.isPresent) {
+        val workspace = if (testsDir.isPresent) {
             testsDir.get().asFile
         } else {
             logger.warn("Tests directory not configured")
             return
         }
 
-        if (!userTestsDirectory.exists()) {
-            logger.warn("Tests directory does not exist: ${userTestsDirectory.absolutePath}")
+        if (!workspace.exists()) {
+            logger.warn("Tests directory does not exist: ${workspace.absolutePath}")
             return
         }
 
@@ -113,7 +119,7 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
             environmentName = environmentName.get(),
             modeId = modeId.get(),
             environmentConfig = environmentConfig.get(),
-            testsDir = userTestsDirectory,
+            workspaceDir = workspace,
             configFile = configDestination,
             testFiles = with(RunnerLauncher) { testFiles.orNull.splitFilter() },
             testNames = with(RunnerLauncher) { testNames.orNull.splitFilter() },
@@ -128,9 +134,9 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
         RunnerLauncher.writeConfig(entry)
         logger.lifecycle("Runner config: ${configDestination.absolutePath}")
 
-        val cliJsFile = RunnerLauncher.resolveCliJs(userTestsDirectory)
+        val cliJsFile = RunnerLauncher.resolveCliJs(workspace)
 
-        runCommand(userTestsDirectory, nodePaths.node, cliJsFile.absolutePath, "--config", configDestination.absolutePath)
+        runCommand(workspace, nodePaths.node, cliJsFile.absolutePath, "--config", configDestination.absolutePath)
 
         logger.lifecycle("E2E tests completed successfully")
     }

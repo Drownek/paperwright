@@ -16,5 +16,13 @@ data class PluginRef @JvmOverloads constructor(
 ) : Serializable {
     companion object {
         private const val serialVersionUID: Long = 1L
+
+        /**
+         * Marks a [specifier] that names a plugin in the workspace's `plugins` directory
+         * rather than an npm package or a path — what `plugins { local("stand-reset") }`
+         * produces. The build resolves it against [PlugwrightLayout.compiledPluginsDir]
+         * before the config is written, so the runner only ever sees a real path.
+         */
+        const val WORKSPACE_SCHEME: String = "plugwright-workspace:"
     }
 }

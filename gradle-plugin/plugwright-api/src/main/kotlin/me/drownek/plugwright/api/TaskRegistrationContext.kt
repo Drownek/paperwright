@@ -29,8 +29,13 @@ interface TaskRegistrationContext {
      */
     val projectPluginJar: Provider<File>
 
-    /** Directory the runner scans for spec files, same value `plugwrightTest<Environment>` uses. */
+    /** Root of the npm project (`plugwright.testsDir`), same value `plugwrightTest<Environment>`
+     *  uses as its working directory. For the directories inside it, use [layout]. */
     val testsDir: Provider<File>
+
+    /** Directory conventions of the workspace, including where this environment may write
+     *  what it generates: `layout.generatedDir(environmentName)`. */
+    val layout: PlugwrightLayout
 
     /**
      * Registers a task named `plugwright<Suffix><Environment>`, e.g. `plugwrightProvisionLocal`

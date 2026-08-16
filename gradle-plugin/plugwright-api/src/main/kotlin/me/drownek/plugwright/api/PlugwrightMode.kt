@@ -35,6 +35,16 @@ interface PlugwrightMode<S : EnvironmentSpec> {
     fun applyLegacyDefaults(spec: S, legacy: LegacyEnvironmentProperties) {}
 
     /**
+     * Fills in whatever [spec] leaves unset that follows from the workspace layout, before
+     * validation and [registerTasks] run. The local mode places its server this way, so a
+     * build script that never mentions `runDir` still gets one, under
+     * `<workspace>/generated/<environment>`.
+     *
+     * Only set properties the build script did not: an explicit value always wins.
+     */
+    fun applyLayoutDefaults(spec: S, layout: PlugwrightLayout) {}
+
+    /**
      * Writes the mode-specific part of the runner config, landing under
      * `environment.config`. Runs at configuration time, so secrets stay [SecretRef]s.
      */

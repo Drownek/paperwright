@@ -19,7 +19,7 @@ internal data class MatrixEnvironmentInput(
     val name: String,
     val modeId: String,
     val allowFailure: Boolean,
-    val testsDir: File,
+    val workspaceDir: File,
     val configFile: File,
     val jsonReportFile: File,
     val junitReportFile: File,
@@ -117,7 +117,7 @@ abstract class PlugwrightMatrixTask : AbstractNodeTask() {
                 environmentName = env.name,
                 modeId = env.modeId,
                 environmentConfig = env.environmentConfig.get(),
-                testsDir = env.testsDir,
+                workspaceDir = env.workspaceDir,
                 configFile = env.configFile,
                 testFiles = fileFilters,
                 testNames = nameFilters,
@@ -130,10 +130,10 @@ abstract class PlugwrightMatrixTask : AbstractNodeTask() {
                 runtimeExport = env.runtimeExport,
             )
             RunnerLauncher.writeConfig(entry)
-            val cliJs = RunnerLauncher.resolveCliJs(env.testsDir)
+            val cliJs = RunnerLauncher.resolveCliJs(env.workspaceDir)
 
             runCommand(
-                env.testsDir, nodePaths.node, cliJs.absolutePath, "--config", entry.configFile.absolutePath,
+                env.workspaceDir, nodePaths.node, cliJs.absolutePath, "--config", entry.configFile.absolutePath,
                 onStdoutLine = { line -> env.logFile.appendText(line + System.lineSeparator()) }
             )
             Outcome(env, readSummary(env.jsonReportFile), null)
