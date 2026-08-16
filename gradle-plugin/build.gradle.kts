@@ -10,12 +10,14 @@ version = projectVersion
 
 repositories {
     mavenCentral()
+    gradlePluginPortal()
 }
 
 dependencies {
     implementation(gradleApi())
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.yaml:snakeyaml:2.0")
+    implementation("org.jetbrains.gradle.plugin.idea-ext:org.jetbrains.gradle.plugin.idea-ext.gradle.plugin:1.4.1")
 }
 
 gradlePlugin {

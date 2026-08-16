@@ -55,12 +55,6 @@ abstract class PlugwrightTestTask : AbstractPlugwrightTask() {
             mapOf(pathKey to nodeDir + File.pathSeparator + (System.getenv(pathKey) ?: ""))
         } else emptyMap()
 
-        // Install dependencies if needed
-        if (!File(userTestsDirectory, "node_modules").exists()) {
-            logger.lifecycle("Installing Node.js dependencies...")
-            runCommand(userTestsDirectory, nodePaths.npm, "install", env = npmEnv)
-        }
-
         // Build TypeScript tests if tsconfig.json exists
         val tsconfigFile = File(userTestsDirectory, "tsconfig.json")
         if (tsconfigFile.exists()) {
