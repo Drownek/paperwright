@@ -60,6 +60,12 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
     @get:Optional
     abstract val reuseMaxPlayers: Property<Int>
 
+    /** From `plugwright.reuse.stay`. Unset means "runner default" — the bot stays connected
+     *  between the tests that borrow it. */
+    @get:Input
+    @get:Optional
+    abstract val reuseStay: Property<Boolean>
+
     /**
      * The mode-specific part of the runner config (`environment.config`). Set by the plugin
      * from either [me.drownek.plugwright.api.PlugwrightMode.serialize] or the mode's own
@@ -143,6 +149,7 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
             runtimeExport = runtimeExport.orNull,
             reuseEnabled = reuseEnabled.orNull,
             reuseMaxPlayers = reuseMaxPlayers.orNull,
+            reuseStay = reuseStay.orNull,
         )
         RunnerLauncher.writeConfig(entry)
         logger.lifecycle("Runner config: ${configDestination.absolutePath}")

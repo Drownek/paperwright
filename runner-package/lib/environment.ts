@@ -12,9 +12,13 @@ export interface EnvironmentCapabilities {
     arbitraryUsernames: boolean;
     lifecycle: boolean;
     cleanupStrategy: 'wipe' | 'compensating' | 'none';
-    /** Absent means "allowed". An environment that breaks under a bot that stays connected
-     *  across tests (an idle-kick timeout, a world reset between tests) sets this to `false`. */
-    playerReuse?: boolean;
+    /** Absent or `true` means "allowed". `false` turns reuse off here entirely — an environment
+     *  that breaks under a bot surviving a test boundary at all (a world reset between tests).
+     *  `'rejoin'` is the middle ground for a server that only objects to the bot *sitting* there:
+     *  entries are reused, but each one leaves at the end of its test and rejoins when a later
+     *  test takes it. It caps `tests.reuse.stay` — a test asking for `stay: true` still gets a
+     *  rejoin, the same way `false` outranks the config today. */
+    playerReuse?: boolean | 'rejoin';
 }
 
 export interface BotConnectionOptions {

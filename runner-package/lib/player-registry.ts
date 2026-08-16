@@ -16,6 +16,11 @@ export interface ReuseOptions {
     excludeAbilities?: string[];
     /** The player's label set must equal `abilities` exactly — no extras allowed. */
     strict?: boolean;
+    /** Whether the bot keeps its connection once the test that borrowed it finishes. `false`
+     *  parks the entry instead: the account, the nick and the labels survive, the connection
+     *  doesn't, and a later test that takes the entry gets a `rejoin()` first. That's the shape
+     *  a server which kicks an idle bot needs. Defaults to the run's `tests.reuse.stay`. */
+    stay?: boolean;
 }
 
 export interface ConnectedPlayer {
@@ -37,6 +42,9 @@ interface RegistryEntry {
     pool: AccountPool | null;
     /** Held by the current test: not handed out a second time, not evicted by LRU. */
     checkedOut: boolean;
+    /** Released with `stay: false`, so the bot left the server but the entry stayed. Checking
+     *  it out again rejoins first. */
+    parked: boolean;
     lastUsedAt: number;
 }
 
@@ -64,6 +72,11 @@ function matches(entry: RegistryEntry, options: ReuseOptions): boolean {
  *
  * `resolve()` never connects a bot itself; it calls the `connect` callback it's given, so the
  * caller keeps ownership of connection options, throttling and account leasing.
+ *
+ * An entry surviving a test boundary does not have to stay *connected* across it: released with
+ * `stay: false`, it parks — the bot leaves, the identity (account, nick, labels) stays, and the
+ * next test to take the entry gets a rejoin. What's reused there is the identity, not the
+ * connection, which is the only form of reuse a server that kicks idle bots allows.
  */
 export class PlayerRegistry {
     private readonly entries: RegistryEntry[] = [];
@@ -110,12 +123,20 @@ export class PlayerRegistry {
         return this.createEntry(derivedKey(options), connect);
     }
 
-    /** Returns a checked-out entry to the free pool. No-op for a player this registry doesn't own. */
-    release(player: PlayerWrapper): void {
+    /** Returns a checked-out entry to the free pool. `stay: false` parks it on the way out —
+     *  the connection goes, the entry stays, and the next checkout rejoins it. No-op for a
+     *  player this registry doesn't own. */
+    async release(player: PlayerWrapper, stay: boolean = true): Promise<void> {
         const entry = this.entries.find(e => e.player === player);
         if (!entry) return;
         entry.checkedOut = false;
         entry.lastUsedAt = Date.now();
+
+        if (stay || entry.parked) return;
+        entry.parked = true;
+        console.log(pc.dim(`[Reuse] ${entry.player.username} parked (stay: false — rejoins when a later test takes it)`));
+        await this.session.disconnectBot(entry.player.bot, entry.player.username);
+        this.session.removeBot(entry.player.bot);
     }
 
     /** Drops a broken or disqualified entry: disconnects it, returns its account, forgets it.
@@ -130,29 +151,37 @@ export class PlayerRegistry {
         for (const entry of [...this.entries]) await this.drop(entry, 'session teardown');
     }
 
-    /** A dead connection is transparently rejoined before it's handed out — a bot picked back
-     *  up by the registry is otherwise indistinguishable from one that's still live, and the
-     *  test has no reason to expect it might not be. A failed rejoin falls back to a fresh
-     *  entry under the same key, same as a first-time miss. */
+    /** An entry that isn't connected — parked on purpose, or dropped by the server — is
+     *  transparently rejoined before it's handed out: a bot picked back up by the registry is
+     *  otherwise indistinguishable from one that's still live, and the test has no reason to
+     *  expect it might not be. A failed rejoin falls back to a fresh entry under the same key,
+     *  same as a first-time miss. */
     private async checkout(entry: RegistryEntry, connect: () => Promise<ConnectedPlayer>): Promise<ResolveResult> {
-        if ((entry.player.bot as any)._client?.ended) {
+        const parked = entry.parked;
+        if (parked || (entry.player.bot as any)._client?.ended) {
             try {
+                // The same gate a first connection passes through: a rejoin is just another
+                // login as far as a shared server's join throttle is concerned, and `stay: false`
+                // turns every single test into one.
+                await this.session.env.beforeJoin?.();
                 await entry.player.rejoin();
             } catch (error) {
-                await this.drop(entry, `dead connection, rejoin failed: ${(error as Error).message}`);
+                await this.drop(entry, `${parked ? 'parked' : 'dead connection'}, rejoin failed: ${(error as Error).message}`);
                 return this.createEntry(entry.key, connect);
             }
+            entry.parked = false;
         }
 
         entry.checkedOut = true;
         const labels = [...entry.player.abilities].join(', ') || '-';
-        console.log(pc.dim(`[Reuse] ${entry.player.username} from registry (key "${entry.key}", abilities: ${labels})`));
+        const how = parked ? 'from registry, rejoined' : 'from registry';
+        console.log(pc.dim(`[Reuse] ${entry.player.username} ${how} (key "${entry.key}", abilities: ${labels})`));
         return { player: entry.player, key: entry.key, reused: true };
     }
 
     private async createEntry(key: string, connect: () => Promise<ConnectedPlayer>): Promise<ResolveResult> {
         const { player, account, pool } = await connect();
-        this.entries.push({ key, player, account, pool, checkedOut: true, lastUsedAt: Date.now() });
+        this.entries.push({ key, player, account, pool, checkedOut: true, parked: false, lastUsedAt: Date.now() });
         console.log(pc.dim(`[Reuse] ${player.username} new player (key "${key}")`));
         return { player, key, reused: false };
     }

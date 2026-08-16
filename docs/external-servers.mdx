@@ -98,7 +98,7 @@ A leased account comes back with the previous test's inventory, balance and op s
 
 With `tests.reuse` on ([Configuration](/configuration)), a registry entry holds its leased account for as long as the entry lives, not just for one test — an account checked out by a long-lived player doesn't return to the pool until that player is evicted, invalidated, or the run ends. Size `accounts { }` accordingly: `maxPlayers` defaults to the pool's capacity minus one so a test's own `createPlayer()` still has a spare slot, but a pool exactly as big as `maxPlayers` leaves nothing free for it.
 
-An environment that can't tolerate a bot sitting connected between tests — an idle-kick timeout, a per-test world reset — should report `capabilities.playerReuse = false` after `setup()` rather than let reuse quietly misbehave. See [Writing a Mode](/custom-modes).
+An environment that can't tolerate a bot surviving a test boundary at all — a per-test world reset — should report `capabilities.playerReuse = false` after `setup()` rather than let reuse quietly misbehave. When the problem is narrower than that, and it usually is on a public server, `capabilities.playerReuse = 'rejoin'` keeps the reuse and drops the idling: the bot leaves at the end of every test and rejoins under the same account when a later test takes its entry. `tests.reuse.stay = false` asks for the same thing from the config side. Either way the account stays leased while the entry is parked, so pool sizing doesn't change. See [Writing a Mode](/custom-modes).
 
 ## Checking the stand before you test
 

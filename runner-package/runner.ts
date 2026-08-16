@@ -111,23 +111,35 @@ async function findSpecFiles(dir: string): Promise<string[]> {
     return results;
 }
 
-/** `tests.reuse.enabled`, narrowed by the environment's own `capabilities.playerReuse`. An
- *  environment that can't tolerate a long-lived bot always wins over the config. */
-function resolveReuse(config: RunnerConfig, env: Environment): { enabled: boolean; maxPlayers: number } {
+/** `tests.reuse`, narrowed by the environment's own `capabilities.playerReuse`. An environment
+ *  that can't tolerate a long-lived bot always wins over the config — outright when it declares
+ *  `false`, and down to a rejoin per test when it declares `'rejoin'`. */
+function resolveReuse(config: RunnerConfig, env: Environment): { enabled: boolean; maxPlayers: number; stay: boolean | 'rejoin' } {
     const requested = config.tests.reuse?.enabled ?? false;
-    if (!requested) return { enabled: false, maxPlayers: 4 };
+    if (!requested) return { enabled: false, maxPlayers: 4, stay: true };
 
     if (env.capabilities.playerReuse === false) {
         console.log(pc.yellow(
             `[Reuse] tests.reuse.enabled is true, but environment "${config.environment.name}" declares ` +
             'capabilities.playerReuse = false — running with reuse off for this environment.'
         ));
-        return { enabled: false, maxPlayers: 4 };
+        return { enabled: false, maxPlayers: 4, stay: true };
     }
 
     const maxPlayers = config.tests.reuse?.maxPlayers
         ?? Math.max(1, (env.accounts?.()?.capacity() ?? 5) - 1);
-    return { enabled: true, maxPlayers };
+
+    if (env.capabilities.playerReuse === 'rejoin') {
+        if (config.tests.reuse?.stay ?? true) {
+            console.log(pc.yellow(
+                `[Reuse] environment "${config.environment.name}" declares capabilities.playerReuse = 'rejoin' — ` +
+                'players leave at the end of every test and rejoin when a later one takes them, whatever tests.reuse.stay says.'
+            ));
+        }
+        return { enabled: true, maxPlayers, stay: 'rejoin' };
+    }
+
+    return { enabled: true, maxPlayers, stay: config.tests.reuse?.stay ?? true };
 }
 
 export async function runTestSession(config: RunnerConfig = loadRunnerConfig()): Promise<void> {
@@ -142,7 +154,8 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
     const reuse = resolveReuse(config, env);
     const session = new Session(env, config.journal ?? null, reuse.maxPlayers);
     if (reuse.enabled) {
-        console.log(pc.dim(`[Reuse] enabled, maxPlayers=${reuse.maxPlayers}`));
+        const stayLabel = reuse.stay === 'rejoin' ? "stay=false (environment's own 'rejoin')" : `stay=${reuse.stay}`;
+        console.log(pc.dim(`[Reuse] enabled, maxPlayers=${reuse.maxPlayers}, ${stayLabel}`));
     }
     const plugins = new PluginHost();
     await plugins.load(config.plugins ?? []);
@@ -199,7 +212,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
 
                 const result = await runTestCase({
                     file, testCase, session, plugins, connOpts, timeoutMs, pluginName,
-                    reuseEnabled: reuse.enabled, forceReuseOff,
+                    reuseEnabled: reuse.enabled, reuseStay: reuse.stay, forceReuseOff,
                 });
                 testResults.push(result);
             }
@@ -256,7 +269,13 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         if (reuse.enabled) {
             const reusedCount = testResults.filter(r => r.reuse?.reused).length;
             if (reusedCount > 0) {
-                console.log(pc.dim(`[Reuse] ${reusedCount} test(s) reused an existing connection instead of reconnecting`));
+                // Under `stay: false` the connection is not what carried over — the identity is,
+                // and the bot rejoined under it — so the count is worth reporting either way.
+                const rejoined = testResults.filter(r => r.reuse?.reused && !r.reuse.stay).length;
+                const how = rejoined === reusedCount ? 'a registry player, rejoined'
+                    : rejoined > 0 ? `a registry player (${rejoined} of them rejoined)`
+                    : 'an existing connection instead of reconnecting';
+                console.log(pc.dim(`[Reuse] ${reusedCount} test(s) reused ${how}`));
             }
         }
 

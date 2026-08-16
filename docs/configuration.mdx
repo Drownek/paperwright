@@ -274,17 +274,20 @@ matrix {
 ```
 
 <ParamField path="reuse" type="Action<ReuseSpec>">
-  Settings for reusing a connected bot across test boundaries instead of reconnecting for every test. `enabled` is `false` by default — an existing suite that depends on a fresh player per test keeps working unchanged until it opts in. `maxPlayers` caps live registry entries; unset falls back to 4, or the environment's account pool capacity minus one when it has a pool.
+  Settings for reusing a connected bot across test boundaries instead of reconnecting for every test. `enabled` is `false` by default — an existing suite that depends on a fresh player per test keeps working unchanged until it opts in. `maxPlayers` caps live registry entries; unset falls back to 4, or the environment's account pool capacity minus one when it has a pool. `stay` decides whether a reused bot keeps its connection between the tests that borrow it; `true` by default.
 </ParamField>
 
 ```kotlin
 reuse {
     enabled.set(true)
     maxPlayers.set(4)
+    stay.set(true)
 }
 ```
 
-`PLUGWRIGHT_REUSE=1` / `PLUGWRIGHT_REUSE=0` overrides `reuse.enabled` from the environment, for trying it in a dev loop without editing a committed build script. See [Writing Tests](/writing-tests) for the test-side API.
+`stay.set(false)` keeps the reuse but drops the parking: at the end of every test the bot leaves the server, and the entry it came from — same account, same nick, same ability labels — waits offline until a later test takes it and rejoins under that identity. What carries over is the identity, not the connection. That's the only form of reuse a server which kicks idle players allows, and it's what an environment declaring `capabilities.playerReuse = 'rejoin'` forces regardless of this setting. A single test can override it with `reuse: { stay }` — see [Writing Tests](/writing-tests).
+
+`PLUGWRIGHT_REUSE=1` / `PLUGWRIGHT_REUSE=0` overrides `reuse.enabled` from the environment, and `PLUGWRIGHT_REUSE_STAY` does the same for `reuse.stay`, for trying either in a dev loop without editing a committed build script.
 
 Per-environment, inside `create(...) { }`:
 
@@ -324,6 +327,10 @@ plugins {
 
 <ParamField path="PLUGWRIGHT_REUSE" type="String">
   Overrides `reuse.enabled` for this run: `1`/`true` turns it on, `0`/`false` turns it off. Unset, or any other value, leaves the build script's own setting alone.
+</ParamField>
+
+<ParamField path="PLUGWRIGHT_REUSE_STAY" type="String">
+  Overrides `reuse.stay` for this run, same `1`/`true` and `0`/`false` spelling. `0` keeps reuse on but sends each bot off the server at the end of every test, rejoining it when a later test takes its entry. Ignored when reuse itself is off.
 </ParamField>
 
 

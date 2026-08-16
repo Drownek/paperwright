@@ -42,6 +42,9 @@ object RunnerLauncher {
         val reuseEnabled: Boolean? = null,
         /** null means "runner default" — only meaningful when [reuseEnabled] is true. */
         val reuseMaxPlayers: Int? = null,
+        /** Whether a reused bot stays connected between tests; null means "runner default"
+         *  (true). Only meaningful when [reuseEnabled] is true. */
+        val reuseStay: Boolean? = null,
     )
 
     fun writeConfig(entry: Entry) {
@@ -74,6 +77,7 @@ object RunnerLauncher {
                     obj("reuse") {
                         put("enabled", entry.reuseEnabled)
                         entry.reuseMaxPlayers?.let { put("maxPlayers", it) }
+                        entry.reuseStay?.let { put("stay", it) }
                     }
                 }
             }

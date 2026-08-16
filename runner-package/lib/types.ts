@@ -27,6 +27,7 @@ export interface TestResult {
     skipReason?: string;
     /** Name of the plugin this test was inherited from, or null for a user spec. */
     plugin?: string | null;
-    /** How the primary player was obtained. Absent when reuse is off for this run. */
-    reuse?: { key: string; reused: boolean; abilities: string[] };
+    /** How the primary player was obtained, and whether it stayed connected afterwards.
+     *  Absent when reuse is off for this run. */
+    reuse?: { key: string; reused: boolean; stay: boolean; abilities: string[] };
 }

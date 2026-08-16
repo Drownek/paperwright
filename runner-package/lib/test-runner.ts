@@ -25,6 +25,11 @@ export interface RunTestCaseParams {
      *  `capabilities.playerReuse`. `false` reproduces the pre-reuse behavior exactly, down to
      *  the absence of `TestResult.reuse`. */
     reuseEnabled?: boolean;
+    /** Whole-run default for `ReuseOptions.stay`: does a registry player keep its connection
+     *  once this test is done, or does it park until a later test rejoins it. `'rejoin'` is the
+     *  environment's own `capabilities.playerReuse` saying it can't hold an idle bot at all —
+     *  a test asking for `stay: true` doesn't get to lift that. */
+    reuseStay?: boolean | 'rejoin';
     /** Set for a plugin test file declaring `PluginTestRef.reuse === false` — forces a fresh
      *  connection for every test in the file regardless of `reuseEnabled` or the test's own
      *  `reuse` option. */
@@ -48,7 +53,7 @@ function normalizeReuse(reuse: false | string | ReuseOptions | undefined): false
  * behavior.
  */
 export async function runTestCase(params: RunTestCaseParams): Promise<TestResult> {
-    const { file, testCase, session, plugins, connOpts, timeoutMs, pluginName = null, reuseEnabled = false, forceReuseOff = false } = params;
+    const { file, testCase, session, plugins, connOpts, timeoutMs, pluginName = null, reuseEnabled = false, reuseStay = true, forceReuseOff = false } = params;
 
     console.log(`  ${pc.bold(`Test: ${testCase.name}`)}`);
     session.consoleLog.clear();
@@ -60,11 +65,17 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
     // player created while reuse doesn't apply to this test) — returned in `finally` below,
     // same as before player reuse existed.
     const adhocAccounts: Array<{ account: Account; pool: AccountPool }> = [];
-    // Players this test drew from the registry, so `finally` knows what to release or drop.
-    const registryPlayers: PlayerWrapper[] = [];
+    // Players this test drew from the registry, with the `stay` each was taken under, so
+    // `finally` knows what to release, what to park and what to drop.
+    const registryPlayers: Array<{ player: PlayerWrapper; stay: boolean }> = [];
     const invalidated = new Set<PlayerWrapper>();
     const reuseEffective = reuseEnabled && !forceReuseOff;
-    let primaryReuse: { key: string; reused: boolean } | null = null;
+    let primaryReuse: { key: string; reused: boolean; stay: boolean } | null = null;
+
+    /** The run's `stay` unless the request overrides it — except under `'rejoin'`, where the
+     *  environment has said an idle bot doesn't survive and no test gets to disagree. */
+    const stayFor = (options: ReuseOptions): boolean =>
+        reuseStay === 'rejoin' ? false : options.stay ?? reuseStay;
 
     // The actual connect: leases an account (or generates a throwaway identity), joins the
     // server, and returns the wrapper. Used directly for a fresh connection, and passed to
@@ -121,7 +132,7 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
         }
 
         const result = await session.players.resolve(normalized, () => connectNewPlayer());
-        registryPlayers.push(result.player);
+        registryPlayers.push({ player: result.player, stay: stayFor(normalized) });
 
         if (result.reused) {
             // Core's own safe minimum for a player coming back from a previous test — anything
@@ -142,7 +153,10 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
     };
 
     const { player, key: primaryKey, reused: primaryReused } = await resolvePlayer(undefined, testCase.reuse);
-    if (primaryKey !== null) primaryReuse = { key: primaryKey, reused: primaryReused };
+    if (primaryKey !== null) {
+        const normalized = normalizeReuse(testCase.reuse);
+        primaryReuse = { key: primaryKey, reused: primaryReused, stay: stayFor(normalized === false ? {} : normalized) };
+    }
     const abortController = new AbortController();
 
     const ctx: TestContext = {
@@ -215,12 +229,14 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
         // A failed or timed-out test hands nothing forward: one bad test turning into a
         // cascade of unrelated failures would put the real cause somewhere other than the
         // report points at.
-        for (const p of registryPlayers) {
+        for (const { player: p, stay } of registryPlayers) {
             const dead = !!(p.bot as any)._client?.ended;
             if (!testPassed || dead || invalidated.has(p)) {
                 await session.players.invalidate(p, !testPassed ? 'test failed' : dead ? 'connection dead' : 'invalidated by test');
             } else {
-                session.players.release(p);
+                // `stay: false` disconnects here too, but keeps the entry: the next test that
+                // asks for this shape of player gets the same identity back, rejoined.
+                await session.players.release(p, stay);
             }
         }
         // Keep every bot the registry owns, not just the ones this test happened to touch —
@@ -231,7 +247,7 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
 
     function reportedReuse(): TestResult['reuse'] {
         if (!reuseEnabled) return undefined;
-        if (!primaryReuse) return { key: 'none', reused: false, abilities: [] };
-        return { key: primaryReuse.key, reused: primaryReuse.reused, abilities: [...player.abilities] };
+        if (!primaryReuse) return { key: 'none', reused: false, stay: false, abilities: [] };
+        return { key: primaryReuse.key, reused: primaryReuse.reused, stay: primaryReuse.stay, abilities: [...player.abilities] };
     }
 }

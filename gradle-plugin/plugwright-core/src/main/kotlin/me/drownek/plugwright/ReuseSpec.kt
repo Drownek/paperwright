@@ -18,7 +18,15 @@ abstract class ReuseSpec {
      *  environment's account pool capacity minus one when it has a pool. */
     abstract val maxPlayers: Property<Int>
 
+    /** Whether a reused bot keeps its connection between the tests that borrow it. On by
+     *  default, which is what reuse meant before this existed. `false` keeps the identity —
+     *  account, nick, ability labels — but drops the connection at the end of every test and
+     *  rejoins when a later one takes it: the only form of reuse a server that kicks idle bots
+     *  allows. A single test can still override this with `reuse: { stay }`. */
+    abstract val stay: Property<Boolean>
+
     init {
         enabled.convention(false)
+        stay.convention(true)
     }
 }

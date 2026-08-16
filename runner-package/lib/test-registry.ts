@@ -18,7 +18,9 @@ export interface TestOptions {
     /** How this test wants its player resolved when `tests.reuse` is on. `false` forces a
      *  fresh connection regardless of the run's reuse setting — for a test that depends on a
      *  brand-new nick or the absence of a label another test might have left behind. A string
-     *  is shorthand for `{ key }`. Omitted means "match by ability labels", the default. */
+     *  is shorthand for `{ key }`. Omitted means "match by ability labels", the default.
+     *  `{ stay }` decides whether the player this test used keeps its connection afterwards,
+     *  overriding the run's `tests.reuse.stay` for this test alone. */
     reuse?: false | string | ReuseOptions;
 }
 

@@ -40,6 +40,13 @@ export interface ReuseConfig {
      *  one when the environment has a pool — one slot is kept free for a test's own
      *  `createPlayer()` call. */
     maxPlayers?: number | null;
+    /** Whether a reused bot keeps its connection between the tests that borrow it. Defaults to
+     *  `true`, which is what reuse meant before this setting existed. `false` parks each entry
+     *  instead — the identity (account, nick, ability labels) is what carries over, and the bot
+     *  rejoins when a later test takes it. A single test can override this through
+     *  `reuse: { stay }`; an environment declaring `playerReuse: 'rejoin'` can't be overridden
+     *  upwards by either. */
+    stay?: boolean | null;
 }
 
 export interface TestsConfig {
@@ -218,18 +225,27 @@ function loadDefaultOrLegacyConfig(): RunnerConfig {
     }
 }
 
-/** `PLUGWRIGHT_REUSE` overrides `tests.reuse.enabled` from a committed config file — the
- *  toggle for a dev's own edit loop, so reuse never has to live in a checked-in build script
- *  just to be tried locally. `1`/`true` enables it, `0`/`false` disables it; anything else, or
- *  unset, leaves the config's own value alone. */
-function applyReuseEnvOverride(config: RunnerConfig): void {
-    const raw = process.env.PLUGWRIGHT_REUSE;
-    if (raw === undefined) return;
-    const enabled = raw === '1' || raw.toLowerCase() === 'true';
-    const disabled = raw === '0' || raw.toLowerCase() === 'false';
-    if (!enabled && !disabled) return;
+/** `1`/`true` and `0`/`false`; anything else, including unset, reads as "not specified". */
+function booleanEnv(raw: string | undefined): boolean | null {
+    if (raw === undefined) return null;
+    if (raw === '1' || raw.toLowerCase() === 'true') return true;
+    if (raw === '0' || raw.toLowerCase() === 'false') return false;
+    return null;
+}
 
-    config.tests.reuse = { ...config.tests.reuse, enabled };
+/** `PLUGWRIGHT_REUSE` and `PLUGWRIGHT_REUSE_STAY` override `tests.reuse` from a committed config
+ *  file — the toggle for a dev's own edit loop, so neither reuse nor the choice between a parked
+ *  and a rejoining bot has to live in a checked-in build script just to be tried locally. */
+function applyReuseEnvOverride(config: RunnerConfig): void {
+    const enabled = booleanEnv(process.env.PLUGWRIGHT_REUSE);
+    const stay = booleanEnv(process.env.PLUGWRIGHT_REUSE_STAY);
+    if (enabled === null && stay === null) return;
+
+    config.tests.reuse = {
+        ...config.tests.reuse,
+        enabled: enabled ?? config.tests.reuse?.enabled ?? false,
+        ...(stay === null ? {} : { stay }),
+    };
 }
 
 /** True when [value] is a secret pointer rather than a plain value. */

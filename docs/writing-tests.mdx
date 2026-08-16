@@ -153,10 +153,21 @@ export interface ReuseOptions {
   abilities?: string[];         // player must carry all of these
   excludeAbilities?: string[];  // player must carry none of these
   strict?: boolean;             // player's labels must equal `abilities` exactly, no extras
+  stay?: boolean;               // keep the connection after this test, or park the entry offline
 }
 ```
 
 `reuse` on `test()` accepts `false`, a string (shorthand for `{ key }`), or a `ReuseOptions` object. `ctx.createPlayer({ reuse: … })` takes the same shape for any secondary player a test creates.
+
+`stay` is the one option that describes what happens *after* the test rather than which player it gets. Left alone it follows the run's `tests.reuse.stay` (`true` by default): the bot stays on the server, and the next test that matches it skips connecting entirely. `stay: false` sends it off at the end of this test and keeps only the entry — the account, the nick and the labels — so a later test gets the same identity back through a rejoin:
+
+```typescript
+test('slow inventory walk', { reuse: { stay: false } }, async ({ player }) => {
+  // the bot leaves when this test ends; the next test to want this player rejoins it
+});
+```
+
+Reach for it when a parked bot is the problem — an idle-kick timeout, an AFK check, a server that counts online players. Everything is disconnected at the end of the run either way. An environment can force it for every test by declaring `capabilities.playerReuse = 'rejoin'`, and then `stay: true` here doesn't lift it.
 
 A test that cares about a clean nick, the absence of a label, or a first-registration flow declares `reuse: false` (or the right `excludeAbilities`) explicitly — reuse never guesses on a test's behalf.
 
