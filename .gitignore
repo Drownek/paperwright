@@ -40,7 +40,8 @@ logs/
 *.tsbuildinfo
 dist/
 
-# Test server runtime
+# Test server runtime — plugwright writes it under <testsDir>/generated/<environment>
+generated/
 run/
 test-server/
 **/server.properties
@@ -61,9 +62,6 @@ test-server/
 **/bukkit.jar
 **/spigot.jar
 server.jar
-
-# Compiled test files
-**/e2e/dist/
 
 # Temporary files
 *.tmp

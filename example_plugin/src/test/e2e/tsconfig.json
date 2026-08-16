@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "node",
+    "rootDir": ".",
     "outDir": "./dist",
     "strict": true,
     "esModuleInterop": true,
@@ -10,5 +11,6 @@
     "sourceMap": true,
     "inlineSources": true
   },
-  "include": ["*.spec.ts", "plugins/*.ts"]
+  "include": ["tests/**/*.ts", "plugins/**/*.ts"],
+  "exclude": ["node_modules", "dist", "generated"]
 }

@@ -21,11 +21,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Build runner-package
+      # The example links all three by path, and npm cannot build a linked package: it packs
+      # the directory into a staging copy that never gets its dev dependencies.
+      - name: Build the local npm packages
         run: |
-          cd runner-package
-          npm install
-          npm run build
+          npm run install:packages
+          npm run build:packages
       - uses: drownek/plugwright-action@v1
         with:
           java-version: "17"
