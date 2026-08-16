@@ -1,13 +1,14 @@
 import { Bot } from 'mineflayer';
 import { ItemWrapper, GuiWrapper, createPlayerExtensions, Window, LiveGuiHandle } from './wrappers.js';
 import { ServerWrapper } from './server.js';
-import { activeBots, messageBuffer, disconnectBot, createBot } from './bot-utils.js';
+import { activeBots, disconnectBot, createBot } from './bot-utils.js';
 import { poll } from './utils.js';
 import { randomUUID } from 'node:crypto';
 import pc from 'picocolors';
 
 export class PlayerWrapper {
     bot: Bot;
+    public readonly messageBuffer: string[] = [];
 
     get inventory() {
         return this.bot.inventory;
@@ -120,7 +121,7 @@ export class PlayerWrapper {
         bot.on('message', (jsonMsg: unknown) => {
             const message = String(jsonMsg);
             console.log(pc.dim(`[Bot ${botUsername}] Received message: "${message}"`));
-            messageBuffer.push(message);
+            this.messageBuffer.push(message);
         });
 
         bot.on('windowOpen', (window: unknown) => {
@@ -150,8 +151,15 @@ export class PlayerWrapper {
         this.bot.chat(message);
     }
 
+    /**
+     * Clears the received message history for this player.
+     */
+    clearMessages(): void {
+        this.messageBuffer.length = 0;
+    }
+
     getMessageBufferIndex(): number {
-        return messageBuffer.length;
+        return this.messageBuffer.length;
     }
 
     nextMessage(options: { timeout?: number } = {}): Promise<string> {
@@ -177,7 +185,7 @@ export class PlayerWrapper {
         this.serverWrapper!.execute(`minecraft:op ${this.username}`);
 
         await poll(
-            () => messageBuffer.find(m => m.includes(`Made ${this.username} a server operator`)),
+            () => this.messageBuffer.find(m => m.includes(`Made ${this.username} a server operator`)),
             { message: `Player ${this.username} was not opped` }
         );
     }
@@ -219,9 +227,14 @@ export class PlayerWrapper {
         this._botOptions = opts;
     }
 
-    async rejoin(options: { timeout?: number } = {}): Promise<void> {
+    async rejoin(options: { timeout?: number; clearMessages?: boolean } = {}): Promise<void> {
         if (!this._botOptions) {
             throw new Error('Cannot rejoin: bot connection options not set. Use wrapPlayer() to create players.');
+        }
+
+        const shouldClear = options.clearMessages ?? true;
+        if (shouldClear) {
+            this.clearMessages();
         }
 
         const botUsername = this.username;
@@ -283,7 +296,7 @@ export class PlayerWrapper {
         this.serverWrapper!.execute(`minecraft:say ${syncId}`);
 
         await poll(
-            () => messageBuffer.find(m => m.includes(syncId)),
+            () => this.messageBuffer.find(m => m.includes(syncId)),
             { message: `Server command sync timed out for: ${cmd}` }
         );
     }

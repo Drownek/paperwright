@@ -1,9 +1,8 @@
 import mineflayer, { Bot } from 'mineflayer';
 import pc from 'picocolors';
 
-/** Shared mutable state for active bots and message buffers. */
+/** Shared mutable state for active bots and buffers. */
 export const activeBots: Bot[] = [];
-export const messageBuffer: string[] = [];
 export const serverConsoleBuffer: string[] = [];
 
 /**
@@ -12,26 +11,38 @@ export const serverConsoleBuffer: string[] = [];
  * Skips the wait entirely if the client is already ended.
  */
 export function disconnectBot(bot: Bot, label: string, timeoutMs: number = 3000): Promise<void> {
+    const cleanupListeners = () => {
+        try {
+            bot.removeAllListeners();
+        } catch (err) {
+            console.log(pc.dim(`[Bot] ${label} warning: failed to remove listeners: ${(err as Error).message}`));
+        }
+    };
+
     const isAlreadyEnded = !!(bot as any)._client?.ended;
     if (isAlreadyEnded) {
+        cleanupListeners();
         return Promise.resolve();
     }
 
     return new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
             console.log(pc.dim(`[Bot] ${label} disconnect timeout, continuing`));
+            cleanupListeners();
             resolve();
         }, timeoutMs);
 
         try {
             bot.once('end', () => {
                 clearTimeout(timeout);
+                cleanupListeners();
                 resolve();
             });
             bot.quit();
         } catch (err) {
             console.log(pc.dim(`[Bot] ${label} error during disconnect: ${(err as Error).message}`));
             clearTimeout(timeout);
+            cleanupListeners();
             resolve();
         }
     });
@@ -68,31 +79,9 @@ export function createBot(options: {
  * Disconnects all active bots and clears the list.
  */
 export async function disconnectAllBots(): Promise<void> {
-    await Promise.all(activeBots.map(b => {
-        const isAlreadyEnded = !!(b as any)._client?.ended;
-        if (isAlreadyEnded) {
-            return Promise.resolve();
-        }
-
-        return new Promise<void>((resolve) => {
-            const timeout = setTimeout(() => {
-                console.log(pc.yellow(`[WARNING] Bot ${b.username} disconnect timeout, continuing anyway`));
-                resolve();
-            }, 2000);
-
-            b.once('end', () => {
-                clearTimeout(timeout);
-                resolve();
-            });
-
-            try {
-                b.quit();
-            } catch (err) {
-                clearTimeout(timeout);
-                resolve();
-            }
-        });
-    }));
+    await Promise.all(
+        activeBots.map((b, i) => disconnectBot(b, b.username ?? `bot-${i}`, 2000))
+    );
 
     activeBots.length = 0;
 }

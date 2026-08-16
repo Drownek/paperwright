@@ -1,5 +1,5 @@
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
-import { readdir, readFile } from 'fs/promises';
+import { readdir } from 'fs/promises';
 import { join, basename } from 'path';
 import { pathToFileURL } from 'url';
 import { randomUUID } from 'node:crypto';
@@ -9,7 +9,7 @@ import { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator } from './lib/wr
 import { PlayerWrapper } from './lib/player.js';
 import { ServerWrapper } from './lib/server.js';
 import { testRegistry, scopeStack } from './lib/test-registry.js';
-import { messageBuffer, serverConsoleBuffer, createBot, disconnectAllBots, writeMcOutput } from './lib/bot-utils.js';
+import { serverConsoleBuffer, createBot, disconnectAllBots, writeMcOutput } from './lib/bot-utils.js';
 import { formatDuration, printTestSummary } from './lib/reporter.js';
 import type { TestResult } from './lib/types.js';
 
@@ -192,7 +192,6 @@ export async function runTestSession(): Promise<void> {
 
                 console.log(`  ${pc.bold(`Test: ${testCase.name}`)}`);
 
-                messageBuffer.length = 0;
                 serverConsoleBuffer.length = 0;
 
                 const server = new ServerWrapper((cmd: string) => {
