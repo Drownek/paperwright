@@ -12,8 +12,7 @@ gradle-app.setting
 !gradle-wrapper.jar
 *.class
 gradle.properties
-/gradle-plugin/bin/
-/example_plugin/bin/
+**/bin/
 
 # IDE
 .idea/
@@ -31,6 +30,9 @@ gradle.properties
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Code Graph index
+.codegraph/
 
 # Logs
 *.log
