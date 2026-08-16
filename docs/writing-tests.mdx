@@ -197,6 +197,20 @@ test('shop shows vip discount', { reuse: 'shopkeeper' }, async ({ player }) => {
 
 `reuseTest` is reported as its own test, listed right before whichever test triggered the (re)creation. If its body throws, that test fails too — the entry is discarded so the next attempt runs `reuseTest` again instead of handing out a half-initialized player.
 
+It takes the same scope as `test`/`opTest` — everything except `reuse` itself, which doesn't apply to a test that's initializing a pool rather than resolving into one:
+
+```typescript
+describe('Shop', () => {
+  reuseTest('shopkeeper', { requires: ['op'] }, async ({ player }) => {
+    // named "Shop > reuse:shopkeeper" — describe nesting applies same as any other test
+  });
+});
+```
+
+- `requires` / `environments` skip it exactly like a regular test would be skipped — reported `skipped`, `fn` never runs. A player handed out under a pool whose `reuseTest` doesn't apply on this environment still connects; it's just never initialized, same as if no `reuseTest` had been declared for that pool at all.
+- Spec-level `beforeEach`/`afterEach` from the enclosing `describe` wrap it, and so do plugin `beforeEach`/`afterEach` and `extendContext` fixtures — `ctx.holy`, matchers, everything a normal test body gets.
+- It does not accept `reuse` — pass `(pool, fn)` or `(pool, options, fn)` where `options` is `requires`/`environments` only.
+
 ## Best Practices
 
 1. **Keep tests isolated** - Each test gets a fresh bot, unless reuse is on
