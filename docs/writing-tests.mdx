@@ -180,6 +180,23 @@ test('cleans up on failure', async ({ player, invalidatePlayer }) => {
 
 `invalidatePlayer` marks a player unfit for the next test: it disconnects instead of being handed out again. The runner does this automatically for a test that fails or times out — one bad test shouldn't hand its mess to the next one.
 
+### Initializing a reuse pool with `reuseTest`
+
+`reuseTest(pool, fn)` registers a one-time setup step for a named reuse pool (the same string used as `reuse: 'poolName'` or `reuse: { key: 'poolName' }`). It runs **only** when the pool's registry entry is actually (re)built — the first time any test asks for `'poolName'`, or later if that entry was dropped (a rejoin failed, abilities stopped matching) and needs to be created again. An ordinary checkout of an already-live entry never runs it:
+
+```typescript
+reuseTest('shopkeeper', async ({ player }) => {
+  await player.chat('/vip add');
+  player.mark('vip');
+});
+
+test('shop shows vip discount', { reuse: 'shopkeeper' }, async ({ player }) => {
+  // guaranteed to run after 'shopkeeper' has been initialized at least once
+});
+```
+
+`reuseTest` is reported as its own test, listed right before whichever test triggered the (re)creation. If its body throws, that test fails too — the entry is discarded so the next attempt runs `reuseTest` again instead of handing out a half-initialized player.
+
 ## Best Practices
 
 1. **Keep tests isolated** - Each test gets a fresh bot, unless reuse is on
