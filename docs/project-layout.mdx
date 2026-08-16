@@ -9,7 +9,8 @@ Everything plugwright needs sits under one directory — `src/test/e2e` unless y
 src/test/e2e/
   package.json          the npm project the runner is installed into
   tsconfig.json
-  .gitignore            node_modules, dist, generated
+  .npmrc                generated from npm { }, when the build script has one
+  .gitignore            node_modules, dist, generated, .npmrc
   tests/                your specs
     shop.spec.ts
   plugins/              runner plugins you wrote yourself
@@ -21,6 +22,8 @@ src/test/e2e/
 ```
 
 Three of those directories are disposable: `node_modules`, `dist` and `generated`. Delete any of them and the next `plugwrightTest` recreates it. `plugwrightInit` writes a `.gitignore` covering all three; if you already have one, it appends the lines it needs and leaves the rest alone.
+
+So is the `.npmrc`, when there is one — it is generated from the `npm { }` block before every install and may hold a registry token, which is why it is gitignored too. See [Configuration](/configuration#npm-registries).
 
 ## tests
 

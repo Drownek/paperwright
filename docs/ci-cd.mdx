@@ -26,3 +26,30 @@ jobs:
           # Path to your plugin gradle project if it's not at the project's root
           working-directory: "."
 ```
+
+## Private npm registries
+
+If the test workspace installs from a private registry, declare it once in `build.gradle.kts` and pass the token through the environment. Nothing about the registry has to be configured on the runner, and the workflow file holds a secret name rather than a secret:
+
+```kotlin
+plugwright {
+    npm {
+        registry("https://nexus.corp/repository/npm-group/") {
+            authToken(secret.env("NPM_TOKEN"))
+        }
+    }
+}
+```
+
+```yaml
+      - uses: drownek/plugwright-action@v1
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        with:
+          java-version: "17"
+          node-version: "24"
+```
+
+Plugwright generates the `.npmrc` from that block before each `npm install`. If `NPM_TOKEN` is missing from the job, the build stops and names it, instead of failing later with a 404 that looks like a typo in a package name. See [Configuration](/configuration#npm-registries).
+
+The generated file is gitignored, but it does exist on disk for the length of the job. On a self-hosted runner with a shared workspace, clean it up the way you would any other credential the job writes.
