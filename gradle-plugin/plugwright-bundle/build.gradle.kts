@@ -14,13 +14,21 @@ dependencies {
     implementation(gradleApi())
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.yaml:snakeyaml:2.0")
-    implementation(project(":plugwright-core"))
-    implementation(project(":plugwright-local"))
-    implementation(project(":plugwright-external"))
 
-    // Compile-time only: its classes reach the runtime classpath through this module's
-    // merged jar below.
+    // Compile-time only, all four: none of them is published under its own coordinates, and
+    // their classes reach the runtime classpath through this module's merged jar below.
+    //
+    // As `implementation` they would instead be written into the published POM as runtime
+    // dependencies on io.github.drownek:plugwright-core, -local and -external — coordinates
+    // that exist in no repository, so every consumer resolving this plugin from a maven
+    // repository failed with "Could not find io.github.drownek:plugwright-core".
+    //
+    // gson and snakeyaml above stay `implementation` deliberately: those are real artifacts
+    // that are not merged into the jar, so the POM does have to ask for them.
     compileOnly(project(":plugwright-api"))
+    compileOnly(project(":plugwright-core"))
+    compileOnly(project(":plugwright-local"))
+    compileOnly(project(":plugwright-external"))
 }
 
 // This is the module published under the plugin id, so its jar must carry the api, core and
@@ -48,6 +56,41 @@ gradlePlugin {
             description = "End-to-end testing framework for Paper/Spigot Minecraft plugins"
             tags.set(listOf("minecraft", "paper", "spigot", "testing", "e2e"))
             implementationClass = "me.drownek.plugwright.PlugwrightPlugin"
+        }
+    }
+}
+
+// An organisation that cannot reach the Gradle Plugin Portal needs the plugin somewhere it
+// can reach, so the plugin is publishable to an arbitrary maven repository as well.
+//
+// Nothing about that repository is written down here: a URL in this file would tie an
+// otherwise public build to one company's infrastructure, and a password in it would be a
+// password in version control. All three come from properties or the environment, and the
+// repository only exists when the URL does — a build without them publishes exactly where it
+// did before.
+val publishUrl = providers.gradleProperty("plugwright.publish.url")
+    .orElse(providers.environmentVariable("PLUGWRIGHT_PUBLISH_URL"))
+val publishUser = providers.gradleProperty("plugwright.publish.user")
+    .orElse(providers.environmentVariable("PLUGWRIGHT_PUBLISH_USER"))
+val publishPassword = providers.gradleProperty("plugwright.publish.password")
+    .orElse(providers.environmentVariable("PLUGWRIGHT_PUBLISH_PASSWORD"))
+
+publishing {
+    repositories {
+        if (publishUrl.isPresent) {
+            maven {
+                name = "plugwright"
+                url = uri(publishUrl.get())
+
+                // A repository that lets anyone write is its own kind of problem, but it is
+                // not this build's to solve: an anonymous deploy is still a valid one.
+                if (publishUser.isPresent && publishPassword.isPresent) {
+                    credentials {
+                        username = publishUser.get()
+                        password = publishPassword.get()
+                    }
+                }
+            }
         }
     }
 }
