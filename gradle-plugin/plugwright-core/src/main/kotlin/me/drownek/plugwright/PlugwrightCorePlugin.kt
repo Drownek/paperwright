@@ -345,6 +345,11 @@ class PlugwrightCorePlugin : Plugin<Project> {
                 writeIfAbsent(project, layout.testsDir.resolve("example.spec.ts"), initTemplate("example.spec.ts"))
                 writeIfAbsent(project, layout.pluginsDir.resolve("example-plugin.ts"), initTemplate("example-plugin.ts"))
 
+                // The install below is the first one this workspace runs, so it needs the
+                // registries too — a scaffold that can only reach the public registry is no
+                // use to a project that lives behind a private one.
+                NpmrcWriter.write(targetDir, extension.npm.toConfig(), project.logger)
+
                 project.logger.lifecycle("Executing 'npm install' in ${targetDir.absolutePath}...")
                 val nodePaths = NodeManager.getOrDownloadNode(defaultNodeInstallDir, extension.nodeVersion.get(), extension.downloadNode.get())
 

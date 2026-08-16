@@ -29,6 +29,8 @@ internal object NpmrcWriter {
 
     private const val EXPLANATION = "# Edit the npm { } block in your build script instead."
 
+    private const val IGNORE_COMMENT = "# Generated from the npm { } block; may hold registry credentials"
+
     /**
      * Brings `<workspace>/.npmrc` in line with [config].
      *
@@ -58,7 +60,30 @@ internal object NpmrcWriter {
         file.parentFile?.mkdirs()
         file.writeText(render(config))
         restrictPermissions(file)
+        ensureIgnored(workspace, logger)
         logger.lifecycle("Wrote ${file.absolutePath} (${summarize(config)})")
+    }
+
+    /**
+     * Keeps the file out of version control.
+     *
+     * `plugwrightInit` scaffolds a `.gitignore` that already covers it, but a workspace made
+     * before this existed has one without the entry — and the file it is missing may hold a
+     * registry token.
+     */
+    private fun ensureIgnored(workspace: File, logger: Logger) {
+        val gitignore = File(workspace, ".gitignore")
+        val entry = FILE_NAME
+
+        if (gitignore.exists()) {
+            val present = gitignore.readLines().any { it.trim().trimStart('/') == entry }
+            if (present) return
+            val separator = if (gitignore.readText().endsWith("\n")) "" else "\n"
+            gitignore.appendText("$separator$IGNORE_COMMENT\n$entry\n")
+        } else {
+            gitignore.writeText("$IGNORE_COMMENT\n$entry\n")
+        }
+        logger.lifecycle("Added $entry to ${gitignore.absolutePath}")
     }
 
     /** Whether the file is one of ours: the marker is the first thing in it. */
