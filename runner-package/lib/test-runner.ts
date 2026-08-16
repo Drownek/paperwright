@@ -9,6 +9,7 @@ import type { Session } from './session.js';
 import type { PluginHost } from './plugin-host.js';
 import type { BotConnectionOptions } from './environment.js';
 import { reuseTestRegistry } from './test-registry.js';
+import { skipReasonForOptions } from './skip-reason.js';
 import type { TestCase } from './test-registry.js';
 import type { TestContext, TestResult } from './types.js';
 import type { ConnectedPlayer, ReuseOptions } from './player-registry.js';
@@ -20,6 +21,10 @@ export interface RunTestCaseParams {
     plugins: PluginHost;
     connOpts: BotConnectionOptions;
     timeoutMs: number;
+    /** The running environment's configured name — `TestOptions.environments` on a `reuseTest`
+     *  is checked against this, same as `runFile`'s own `skipReasonFor` checks it for a
+     *  regular `TestCase`. */
+    environmentName: string;
     /** Set when this test came from a plugin's inherited `tests`, for report labeling. */
     pluginName?: string | null;
     /** Whole-run setting: `tests.reuse.enabled` narrowed by the environment's
@@ -58,7 +63,7 @@ function normalizeReuse(reuse: false | string | ReuseOptions | undefined): false
  * behavior.
  */
 export async function runTestCase(params: RunTestCaseParams): Promise<TestResult> {
-    const { file, testCase, session, plugins, connOpts, timeoutMs, pluginName = null, reuseEnabled = false, reuseStay = true, forceReuseOff = false, onExtraResult } = params;
+    const { file, testCase, session, plugins, connOpts, timeoutMs, environmentName, pluginName = null, reuseEnabled = false, reuseStay = true, forceReuseOff = false, onExtraResult } = params;
 
     console.log(`  ${pc.bold(`Test: ${testCase.name}`)}`);
     session.consoleLog.clear();
@@ -126,6 +131,16 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
         const reuseCase = reuseTestRegistry.get(poolKey);
         if (!reuseCase) return;
 
+        const skipReason = skipReasonForOptions(session.env, environmentName, reuseCase.requires, reuseCase.environments);
+        if (skipReason) {
+            // Same as a filtered-out regular test: skipped, not failed. A player handed out
+            // under a pool whose reuseTest doesn't apply here still connects — it's just never
+            // initialized, same as if no reuseTest had been declared for it at all.
+            console.log(`  Test: ${reuseCase.name} - SKIPPED (${skipReason})`);
+            onExtraResult?.({ file, testName: reuseCase.name, passed: true, durationMs: 0, skipped: true, skipReason, plugin: pluginName });
+            return;
+        }
+
         console.log(`  ${pc.bold(`Test: ${reuseCase.name}`)}`);
         const reuseAbort = new AbortController();
         const reuseFinalizers: Array<() => void | Promise<void>> = [];
@@ -148,9 +163,17 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
             }, timeoutMs);
         });
 
+        // Same hook order as a regular test's body: plugin beforeEach → spec beforeEach → fn →
+        // finalizers → spec afterEach → plugin afterEach.
         const body = (async (): Promise<void> => {
+            await plugins.beforeEach(reuseCtx);
+            for (const hook of reuseCase.beforeHooks) await hook(reuseCtx);
+
+            let testError: unknown;
             try {
                 await reuseCase.fn(reuseCtx);
+            } catch (e) {
+                testError = e;
             } finally {
                 for (const finalizer of [...reuseFinalizers].reverse()) {
                     try {
@@ -159,7 +182,17 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
                         console.error(pc.red(`[cleanup] reuseTest "${poolKey}" finalizer error: ${(e as Error).message}`));
                     }
                 }
+                for (const hook of reuseCase.afterHooks) {
+                    try {
+                        await hook(reuseCtx);
+                    } catch (e) {
+                        testError ??= e;
+                        console.error(pc.red(`[afterEach] reuseTest "${poolKey}" hook error: ${(e as Error).message}`));
+                    }
+                }
+                await plugins.afterEach(reuseCtx);
             }
+            if (testError) throw testError;
         })().finally(() => clearTimeout(timeoutHandle));
 
         try {

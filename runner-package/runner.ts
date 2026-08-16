@@ -8,6 +8,7 @@ import { testRegistry, resetRegistry } from './lib/test-registry.js';
 import { Session } from './lib/session.js';
 import { PluginHost } from './lib/plugin-host.js';
 import { runTestCase } from './lib/test-runner.js';
+import { skipReasonForOptions } from './lib/skip-reason.js';
 import { LocalEnvironment } from './lib/environments/local.js';
 import { externalEnvironment } from './lib/environments/external.js';
 import { PlayerWrapper } from './lib/player.js';
@@ -79,24 +80,6 @@ async function resolveEnvironment(cfg: EnvironmentConfig): Promise<Environment> 
         return factory(cfg.config) as Environment;
     }
     throw new Error(`Environment "${cfg.name}" uses mode "${cfg.mode}", which this runner cannot run yet.`);
-}
-
-/** Capability keys from `testCase.requires` that `env` does not actually satisfy. A
- *  value of `false`, `'none'`, or an absent key all count as unmet.
- *
- *  `'key:value'` demands one specific value instead — `'consoleOutput:full'` for a test that
- *  reads the server log, which a console answering only its own commands cannot provide even
- *  though it satisfies plain `'console'`. */
-function missingCapabilities(env: Environment, required: string[]): string[] {
-    const capabilities = env.capabilities as unknown as Record<string, unknown>;
-    return required.filter(key => {
-        const separator = key.indexOf(':');
-        if (separator !== -1) {
-            return String(capabilities[key.slice(0, separator)]) !== key.slice(separator + 1);
-        }
-        const value = capabilities[key];
-        return value === false || value === 'none' || value === undefined;
-    });
 }
 
 async function findSpecFiles(dir: string): Promise<string[]> {
@@ -185,14 +168,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
             if (testNameFilters && !testNameFilters.some(pattern => testCase.name.includes(pattern))) {
                 return `filtered out by tests.names (${testNameFilters.join(',')})`;
             }
-            if (testCase.environments && !testCase.environments.includes(config.environment.name)) {
-                return `requires environment in [${testCase.environments.join(', ')}], running "${config.environment.name}"`;
-            }
-            const missing = missingCapabilities(env, testCase.requires);
-            if (missing.length > 0) {
-                return `requires capability [${missing.join(', ')}], unavailable on "${config.environment.name}"`;
-            }
-            return null;
+            return skipReasonForOptions(env, config.environment.name, testCase.requires, testCase.environments);
         }
 
         /** Imports one compiled spec file (a fresh `testRegistry`) and runs everything it
@@ -212,6 +188,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
 
                 const result = await runTestCase({
                     file, testCase, session, plugins, connOpts, timeoutMs, pluginName,
+                    environmentName: config.environment.name,
                     reuseEnabled: reuse.enabled, reuseStay: reuse.stay, forceReuseOff,
                     onExtraResult: r => testResults.push(r),
                 });
