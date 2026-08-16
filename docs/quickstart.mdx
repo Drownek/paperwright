@@ -43,14 +43,21 @@ description: "Start running your first test in less than 5 minutes."
   </Step>
 
   <Step title="Initialization">
-    Run the init command to set up your test folder.
-    This will automatically generate your package.json, TypeScript configuration, and an example test in a chosen directory.
-
-    This command is interactive, so simply follow the prompts on your screen:
+    Run the init command to set up your test folder. It asks where to put it, then writes an npm project with a `package.json`, a TypeScript config, a `.gitignore`, an example spec and an example runner plugin:
 
     ```bash
     ./gradlew plugwrightInit
     ```
+
+    ```
+    src/test/e2e/
+      tests/example.spec.ts          your specs go here
+      plugins/example-plugin.ts      hooks, fixtures and matchers
+      package.json, tsconfig.json
+      .gitignore                     node_modules, dist, generated
+    ```
+
+    Everything a run generates — the compiled specs, the server the local environment starts — stays inside that directory, under `dist` and `generated`. See [Project Layout](/project-layout).
   </Step>
 
   <Step title="Your First Test">

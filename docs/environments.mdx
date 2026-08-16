@@ -26,7 +26,6 @@ plugwright {
         create("local", LocalMode) {
             minecraftVersion.set("1.21.11")
             acceptEula.set(true)
-            runDir.set(file("run"))
         }
 
         create("staging", ExternalMode) {
@@ -38,7 +37,7 @@ plugwright {
 }
 ```
 
-The name you pass to `create` becomes the task suffix and the report file name: `local` gives you `plugwrightTestLocal` and `build/reports/plugwright/local.json`.
+The name you pass to `create` becomes the task suffix and the report file name: `local` gives you `plugwrightTestLocal` and `build/reports/plugwright/local.json`. It also names the directory the environment writes to — `src/test/e2e/generated/local`, where the Paper server for that environment ends up. Two local environments in one build therefore run two separate servers without either one saying where. See [Project Layout](/project-layout).
 
 <Note>
 A build script with no `environments { }` block still works. The flat properties (`minecraftVersion`, `runDir`, `downloadPlugins`, and the rest) describe one implicit `local` environment, exactly as they did before. See [Configuration](/configuration).

@@ -75,13 +75,21 @@ plugwright {
 
 **2. Initialize the test folder:**
 
-Run the init command to set up your test folder.
-This will automatically generate your package.json, TypeScript configuration, and an example test in a chosen directory.
+Run the init command to set up your test folder. It asks where to put it, then writes an npm project with a `package.json`, a TypeScript config, a `.gitignore`, an example spec and an example runner plugin:
 
-This command is interactive, so simply follow the prompts on your screen:
 ```bash
 ./gradlew plugwrightInit
 ```
+
+```
+src/test/e2e/
+  tests/example.spec.ts          your specs go here
+  plugins/example-plugin.ts      hooks, fixtures and matchers
+  package.json, tsconfig.json
+  .gitignore                     node_modules, dist, generated
+```
+
+Compiled specs land in `dist`, and everything an environment writes — the Paper server the local one starts, for instance — in `generated`. Neither belongs in version control. See [Project Layout](https://plugwright.dev/project-layout).
 
 **3. Run your tests:**
 
@@ -131,6 +139,7 @@ plugwright {
 
 `./gradlew plugwrightTest` runs the matrix and prints a summary per environment; `./gradlew plugwrightTestStaging` runs one. A server behind a login wall needs a runner plugin to get past it, and `@plugwright/auth-authme` is the reference implementation for AuthMe-style login. Writing your own kind of environment — a proxy, a Compose stack — is a Kotlin mode plus an npm package.
 
+- [Project layout](https://plugwright.dev/project-layout) — where specs, plugins and generated files live
 - [Environments](https://plugwright.dev/environments) — modes, tasks, the matrix
 - [External servers](https://plugwright.dev/external-servers) — console channels, account pools, cleanup
 - [Runner plugins](https://plugwright.dev/plugins) — hooks, fixtures, matchers, inherited tests

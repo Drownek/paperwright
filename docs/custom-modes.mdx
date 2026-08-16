@@ -90,6 +90,22 @@ What each piece is for:
 - `serialize` writes `environment.config` at configuration time. Secrets stay `SecretRef`s here — `node.put("password", spec.password.get())` writes a reference, not a password.
 - `registerTasks` adds tasks named `plugwright<Suffix><Environment>`, so `register("Up", ...)` in an environment called `proxy` gives `plugwrightUpProxy`. `prepareTask` marks the one that has to run before the tests do.
 
+### Files your mode generates
+
+Anything written while an environment runs belongs under `ctx.layout.generatedDir(ctx.environmentName)` — `src/test/e2e/generated/proxy` for the mode above. That directory is gitignored and is yours alone; no other environment writes there.
+
+If the spec has a property for it, fill the default in `applyLayoutDefaults` rather than in the property's convention. It runs before validation, only for properties the build script left unset, so an explicit value in the build script still wins:
+
+```kotlin
+override fun applyLayoutDefaults(spec: VelocityEnvironmentSpec, layout: PlugwrightLayout) {
+    if (!spec.workDir.isPresent) {
+        spec.workDir.set(File(layout.generatedDir(spec.name), "compose"))
+    }
+}
+```
+
+`PlugwrightLayout` also knows where the sources and the compiled output are: `testsDir`, `pluginsDir`, `compiledTestsDir`, `compiledPluginsDir`. See [Project Layout](/project-layout).
+
 Preparation belongs in a task rather than a callback. A callback executed inside someone else's `@TaskAction` drags your mode object into that task's state, breaks the configuration cache, and can never be run on its own. A task with declared inputs and outputs gets up-to-date checks and a name someone can type.
 
 If a config value needs something only a task can reach — the Java toolchain, a Gradle service — set it from `registerTasks` with `ctx.environmentConfig(provider)` instead of from `serialize`. That is what `LocalMode` does for the Java executable path.

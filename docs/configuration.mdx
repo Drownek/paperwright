@@ -18,7 +18,6 @@ plugwright {
     environments {
         create("local", LocalMode) {
             minecraftVersion.set("1.21.11")
-            runDir.set(file("run"))
             acceptEula.set(true)
         }
     }
@@ -40,10 +39,11 @@ plugwright {
     // ---- Server Configuration ----
     // Version of Paper server to download and run
     minecraftVersion.set("1.19.4")
-    
-    // Directory where the test server will be located
-    runDir.set(file("run"))
-    
+
+    // Where the test server lives. Leave it out and it goes to
+    // <testsDir>/generated/<environment>/run
+    // runDir.set(file("/mnt/fast-disk/paper"))
+
     // Automatically accept the Minecraft EULA
     acceptEula.set(true)
     
@@ -86,21 +86,20 @@ minecraftVersion.set("1.20.1")
 ```
 
 <ParamField path="runDir" type="DirectoryProperty">
-  Directory where the test server will be located. Default is `project.layout.projectDirectory.dir("run")`.
+  Directory where the test server will be located. Unset by default, which puts it in `<testsDir>/generated/<environment>/run` — set it only to keep the server somewhere else. See [Project Layout](/project-layout).
 </ParamField>
 
 ```kotlin
-runDir.set(file("run"))
-runDir.set(file("test-server"))
+runDir.set(file("/mnt/fast-disk/paper"))
 ```
 
 <ParamField path="testsDir" type="DirectoryProperty">
-  Directory containing test files. Default is `file("src/test/e2e")`.
+  Root of the test workspace: the npm project, the `tests` and `plugins` sources, and the `dist` and `generated` directories the build writes. Default is `file("src/test/e2e")`.
 </ParamField>
 
 ```kotlin
 testsDir.set(file("src/test/e2e"))
-testsDir.set(file("tests/integration"))
+testsDir.set(file("e2e"))
 ```
 
 <ParamField path="acceptEula" type="Property<Boolean>">
@@ -237,7 +236,7 @@ Per-environment, inside `create(...) { }`:
 </ParamField>
 
 <ParamField path="plugins" type="Action<PluginsSpec>">
-  Runner plugins this environment loads: `npm("@scope/name") { options["key"] = "value" }` for a published package, `local(file("…"))` for a compiled file in your test project. See [Runner Plugins](/plugins).
+  Runner plugins this environment loads: `npm("@scope/name") { options["key"] = "value" }` for a published package, `local("name")` for one of your own in the workspace's `plugins` directory. See [Runner Plugins](/plugins).
 </ParamField>
 
 ```kotlin
