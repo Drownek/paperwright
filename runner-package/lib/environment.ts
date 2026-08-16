@@ -12,6 +12,9 @@ export interface EnvironmentCapabilities {
     arbitraryUsernames: boolean;
     lifecycle: boolean;
     cleanupStrategy: 'wipe' | 'compensating' | 'none';
+    /** Absent means "allowed". An environment that breaks under a bot that stays connected
+     *  across tests (an idle-kick timeout, a world reset between tests) sets this to `false`. */
+    playerReuse?: boolean;
 }
 
 export interface BotConnectionOptions {

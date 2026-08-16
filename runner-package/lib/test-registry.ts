@@ -1,4 +1,5 @@
 import type { TestContext } from './types.js';
+import type { ReuseOptions } from './player-registry.js';
 
 export type Hook = (context: TestContext) => Promise<void> | void;
 type TestFn = (context: TestContext) => Promise<void>;
@@ -14,6 +15,11 @@ type TestFn = (context: TestContext) => Promise<void>;
 export interface TestOptions {
     requires?: string[];
     environments?: string[];
+    /** How this test wants its player resolved when `tests.reuse` is on. `false` forces a
+     *  fresh connection regardless of the run's reuse setting — for a test that depends on a
+     *  brand-new nick or the absence of a label another test might have left behind. A string
+     *  is shorthand for `{ key }`. Omitted means "match by ability labels", the default. */
+    reuse?: false | string | ReuseOptions;
 }
 
 interface DescribeScope {
@@ -32,6 +38,7 @@ export interface TestCase {
     afterHooks: Hook[];
     requires: string[];
     environments: string[] | null;
+    reuse?: false | string | ReuseOptions;
 }
 
 export const testRegistry: TestCase[] = [];
@@ -57,6 +64,7 @@ function registerTest(name: string, options: TestOptions, fn: TestFn): void {
         afterHooks: [...scopeStack].reverse().flatMap(s => s.afterHooks),
         requires: options.requires ?? [],
         environments: options.environments ?? null,
+        reuse: options.reuse,
     });
 }
 
@@ -70,13 +78,22 @@ export function test(name: string, fnOrOptions: TestFn | TestOptions, maybeFn?: 
     }
 }
 
+/** Appends `abilities: ['op']` to whatever `reuse` the test declared (or the implicit `{}`),
+ *  so a reused player is matched by op status same as a fresh one gets opped. */
+function withOpAbility(reuse: TestOptions['reuse']): ReuseOptions {
+    const base: ReuseOptions = reuse === false ? {} : reuse === undefined ? {} : typeof reuse === 'string' ? { key: reuse } : reuse;
+    return { ...base, abilities: [...(base.abilities ?? []), 'op'] };
+}
+
 export function opTest(name: string, fn: TestFn): void;
 export function opTest(name: string, options: TestOptions, fn: TestFn): void;
 export function opTest(name: string, fnOrOptions: TestFn | TestOptions, maybeFn?: TestFn): void {
     const options = typeof fnOrOptions === 'function' ? {} : fnOrOptions;
     const fn = typeof fnOrOptions === 'function' ? fnOrOptions : maybeFn!;
-    registerTest(name, options, async (context: TestContext) => {
-        await context.player.makeOp();
+    registerTest(name, { ...options, reuse: options.reuse === false ? false : withOpAbility(options.reuse) }, async (context: TestContext) => {
+        // Only when the resolved player doesn't already carry it: resolution above already
+        // matched on `op`, so a reused player skips straight to the test body.
+        if (!context.player.abilities.has('op')) await context.player.makeOp();
         await fn(context);
     });
 }

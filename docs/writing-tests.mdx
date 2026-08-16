@@ -123,9 +123,55 @@ test('advanced waiting', async ({ player }) => {
 });
 ```
 
+## Player Reuse
+
+By default, every test gets a fresh bot and disconnects it when the test ends. When `tests.reuse` is on ([Configuration](/configuration)), a test can ask for a bot that survived from an earlier test instead of reconnecting:
+
+```typescript
+test('shows prices', async ({ player }) => {
+  // same long-lived player as any other default-reuse test, if one is free
+});
+
+opTest('admin can edit', async ({ player }) => {
+  // matched to a player already carrying the `op` label — makeOp() only runs if none does
+});
+
+test('regular player cannot edit', { reuse: { excludeAbilities: ['op'] } }, async ({ player }) => {
+  // explicitly asks for a player that is NOT op, even if an op'd one is sitting free
+});
+
+test('first join flow', { reuse: false }, async ({ player }) => {
+  // always a brand-new connection, regardless of the run's reuse setting
+});
+```
+
+Matching goes by **ability labels**, not by resetting server state — the runner has no way to undo what a command changed, so it doesn't pretend to. `player.makeOp()`, `player.deOp()` and `player.setGameMode()` label the player automatically (`op`, `gamemode:creative`, …); anything else needs an explicit `player.mark('kit:starter')` / `player.unmark(...)`. Read the current set with `player.abilities`.
+
+```typescript
+export interface ReuseOptions {
+  key?: string;                 // explicit identity — same bot every time, e.g. the second player in a multiplayer test
+  abilities?: string[];         // player must carry all of these
+  excludeAbilities?: string[];  // player must carry none of these
+  strict?: boolean;             // player's labels must equal `abilities` exactly, no extras
+}
+```
+
+`reuse` on `test()` accepts `false`, a string (shorthand for `{ key }`), or a `ReuseOptions` object. `ctx.createPlayer({ reuse: … })` takes the same shape for any secondary player a test creates.
+
+A test that cares about a clean nick, the absence of a label, or a first-registration flow declares `reuse: false` (or the right `excludeAbilities`) explicitly — reuse never guesses on a test's behalf.
+
+```typescript
+test('cleans up on failure', async ({ player, invalidatePlayer }) => {
+  // ...
+  if (somethingLeftThePlayerInABadState) invalidatePlayer(player);
+});
+```
+
+`invalidatePlayer` marks a player unfit for the next test: it disconnects instead of being handed out again. The runner does this automatically for a test that fails or times out — one bad test shouldn't hand its mess to the next one.
+
 ## Best Practices
 
-1. **Keep tests isolated** - Each test gets a fresh bot
+1. **Keep tests isolated** - Each test gets a fresh bot, unless reuse is on
 2. **Use descriptive names** - Make test failures easy to understand
 3. **Wait for conditions** - Use assertions that auto-retry
 4. **Test one thing** - Each test should verify one behavior

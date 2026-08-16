@@ -76,6 +76,12 @@ export class PluginHost {
         }
     }
 
+    async onPlayerReuse(player: PlayerWrapper, ctx: { account: Account; env: Environment }): Promise<void> {
+        for (const { plugin } of this.plugins) {
+            await plugin.onPlayerReuse?.(player, ctx);
+        }
+    }
+
     async beforeEach(ctx: TestContext): Promise<void> {
         for (const { plugin } of this.plugins) {
             await plugin.beforeEach?.(ctx);
@@ -105,13 +111,13 @@ export class PluginHost {
     /** Inherited test files for the given mode, across every plugin with `inheritTests`
      *  enabled. `findSpecFiles` never sees these — it skips `node_modules` — so this is the
      *  only way a plugin's own tests run. */
-    testFiles(mode: PluginTestRef['mode']): { file: string; pluginName: string }[] {
+    testFiles(mode: PluginTestRef['mode']): { file: string; pluginName: string; reuse?: false }[] {
         return this.plugins
             .filter(p => p.inheritTests)
             .flatMap(({ plugin }) =>
                 (plugin.tests ?? [])
                     .filter(t => t.mode === mode)
-                    .map(t => ({ file: t.file, pluginName: plugin.name }))
+                    .map(t => ({ file: t.file, pluginName: plugin.name, reuse: t.reuse }))
             );
     }
 

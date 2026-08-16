@@ -25,7 +25,8 @@ build/reports/plugwright/<env>.log         per-environment output, matrix runs o
       "durationMs": 63,
       "error": null,
       "skipReason": null,
-      "plugin": null
+      "plugin": null,
+      "reuse": { "key": "auto:[]!()", "reused": true, "abilities": [] }
     },
     {
       "file": "…/dist/simple-ts.spec.js",
@@ -34,13 +35,16 @@ build/reports/plugwright/<env>.log         per-environment output, matrix runs o
       "durationMs": 0,
       "error": null,
       "skipReason": "requires capability [consoleOutput:full], unavailable on \"staging\"",
-      "plugin": null
+      "plugin": null,
+      "reuse": null
     }
   ]
 }
 ```
 
 `status` is `pass`, `fail` or `skip`. `plugin` names the plugin a test came from when it was inherited rather than found in your test directory.
+
+`reuse` is `null` when `tests.reuse` is off for the run. Otherwise it's always present, even for a test that opted out with `reuse: false` (`reused: false`, `key: "none"`). `reused: true` means the player came from an earlier test instead of a fresh connection; `abilities` is the label set it was matched against. See [Writing Tests](/writing-tests).
 
 Every skip carries its reason: excluded by name, wrong environment, or a capability the environment doesn't have. A skipped test that doesn't say why is worse than a failing one, because it reads as coverage.
 

@@ -152,6 +152,9 @@ class VelocityEnvironment implements Environment {
         arbitraryUsernames: true,
         lifecycle: true,
         cleanupStrategy: 'compensating',
+        // Absent means "allowed". Set this to false if a bot sitting connected between
+        // tests would break the environment (an idle-kick timeout, a per-test world reset).
+        playerReuse: true,
     };
 
     async setup(session: Session): Promise<void> { /* connect, probe, warm up */ }
@@ -163,7 +166,7 @@ class VelocityEnvironment implements Environment {
 }
 ```
 
-Capabilities are a promise the runner holds you to. Tests declaring `requires: ['op']` are skipped when you report `op: false`, so report what is true after `setup()` rather than what the build script hoped for. `consoleOutput` is three-valued (`full`, `responses`, `none`) because a console that answers its own commands still cannot show a test the server log.
+Capabilities are a promise the runner holds you to. Tests declaring `requires: ['op']` are skipped when you report `op: false`, so report what is true after `setup()` rather than what the build script hoped for. `consoleOutput` is three-valued (`full`, `responses`, `none`) because a console that answers its own commands still cannot show a test the server log. `playerReuse: false` overrides `tests.reuse.enabled` for the whole run against this environment — set it when a long-lived bot would break something the environment can't tell tests about any other way.
 
 `accounts()` and `beforeJoin()` are optional. Returning no pool means every bot gets a throwaway `Test_<uuid>` username, which is what `local` does.
 

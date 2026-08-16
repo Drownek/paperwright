@@ -273,6 +273,19 @@ matrix {
 }
 ```
 
+<ParamField path="reuse" type="Action<ReuseSpec>">
+  Settings for reusing a connected bot across test boundaries instead of reconnecting for every test. `enabled` is `false` by default — an existing suite that depends on a fresh player per test keeps working unchanged until it opts in. `maxPlayers` caps live registry entries; unset falls back to 4, or the environment's account pool capacity minus one when it has a pool.
+</ParamField>
+
+```kotlin
+reuse {
+    enabled.set(true)
+    maxPlayers.set(4)
+}
+```
+
+`PLUGWRIGHT_REUSE=1` / `PLUGWRIGHT_REUSE=0` overrides `reuse.enabled` from the environment, for trying it in a dev loop without editing a committed build script. See [Writing Tests](/writing-tests) for the test-side API.
+
 Per-environment, inside `create(...) { }`:
 
 <ParamField path="includeInMatrix" type="Property<Boolean>">
@@ -307,6 +320,10 @@ plugins {
 
 <ParamField path="PLUGWRIGHT_DEBUG" type="String">
   Set `PLUGWRIGHT_DEBUG=1` in your environment to enable verbose debug logging during test execution. This is particularly useful for troubleshooting GUI flows and inspecting window open/close events from the bot.
+</ParamField>
+
+<ParamField path="PLUGWRIGHT_REUSE" type="String">
+  Overrides `reuse.enabled` for this run: `1`/`true` turns it on, `0`/`false` turns it off. Unset, or any other value, leaves the build script's own setting alone.
 </ParamField>
 
 

@@ -32,8 +32,10 @@ export { test, opTest, describe, beforeEach, afterEach } from './lib/test-regist
 export type { TestOptions, TestCase } from './lib/test-registry.js';
 export { expect } from './lib/matchers.js';
 export { loadRunnerConfig, resolveSecret, isSecretRef } from './lib/config.js';
-export type { RunnerConfig, EnvironmentConfig, TestsConfig, LocalEnvironmentConfig, SecretRef, PluginConfig } from './lib/config.js';
-export type { TestContext } from './lib/types.js';
+export type { RunnerConfig, EnvironmentConfig, TestsConfig, LocalEnvironmentConfig, SecretRef, PluginConfig, ReuseConfig } from './lib/config.js';
+export type { TestContext, TestResult } from './lib/types.js';
+export { PlayerRegistry } from './lib/player-registry.js';
+export type { ReuseOptions } from './lib/player-registry.js';
 export type { Environment, EnvironmentCapabilities, BotConnectionOptions } from './lib/environment.js';
 export type { ServerConsole } from './lib/console.js';
 export { Session } from './lib/session.js';
@@ -109,6 +111,25 @@ async function findSpecFiles(dir: string): Promise<string[]> {
     return results;
 }
 
+/** `tests.reuse.enabled`, narrowed by the environment's own `capabilities.playerReuse`. An
+ *  environment that can't tolerate a long-lived bot always wins over the config. */
+function resolveReuse(config: RunnerConfig, env: Environment): { enabled: boolean; maxPlayers: number } {
+    const requested = config.tests.reuse?.enabled ?? false;
+    if (!requested) return { enabled: false, maxPlayers: 4 };
+
+    if (env.capabilities.playerReuse === false) {
+        console.log(pc.yellow(
+            `[Reuse] tests.reuse.enabled is true, but environment "${config.environment.name}" declares ` +
+            'capabilities.playerReuse = false — running with reuse off for this environment.'
+        ));
+        return { enabled: false, maxPlayers: 4 };
+    }
+
+    const maxPlayers = config.tests.reuse?.maxPlayers
+        ?? Math.max(1, (env.accounts?.()?.capacity() ?? 5) - 1);
+    return { enabled: true, maxPlayers };
+}
+
 export async function runTestSession(config: RunnerConfig = loadRunnerConfig()): Promise<void> {
     const testFileFilters = config.tests.include ?? null;
     const testNameFilters = config.tests.names ?? null;
@@ -118,7 +139,11 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
     const testResults: TestResult[] = [];
 
     const env = await resolveEnvironment(config.environment);
-    const session = new Session(env, config.journal ?? null);
+    const reuse = resolveReuse(config, env);
+    const session = new Session(env, config.journal ?? null, reuse.maxPlayers);
+    if (reuse.enabled) {
+        console.log(pc.dim(`[Reuse] enabled, maxPlayers=${reuse.maxPlayers}`));
+    }
     const plugins = new PluginHost();
     await plugins.load(config.plugins ?? []);
     // Must happen before the first spec file is imported — see PluginHost.registerMatchers.
@@ -160,7 +185,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         /** Imports one compiled spec file (a fresh `testRegistry`) and runs everything it
          *  registered, appending results to `testResults`. Shared by user specs and every
          *  plugin-inherited test file. */
-        async function runFile(file: string, pluginName: string | null): Promise<void> {
+        async function runFile(file: string, pluginName: string | null, forceReuseOff: boolean = false): Promise<void> {
             resetRegistry();
             await import(pathToFileURL(file).href);
 
@@ -172,17 +197,20 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
                     continue;
                 }
 
-                const result = await runTestCase({ file, testCase, session, plugins, connOpts, timeoutMs, pluginName });
+                const result = await runTestCase({
+                    file, testCase, session, plugins, connOpts, timeoutMs, pluginName,
+                    reuseEnabled: reuse.enabled, forceReuseOff,
+                });
                 testResults.push(result);
             }
         }
 
         // Preflight: plugin auth/setup tests, run before anything else. A failure aborts the
         // whole session.
-        for (const { file, pluginName } of plugins.testFiles('preflight')) {
+        for (const { file, pluginName, reuse: fileReuse } of plugins.testFiles('preflight')) {
             console.log(`\n${pc.blue(pc.bold(`Running preflight tests from: ${file} ${pc.dim(`(plugin ${pluginName})`)}`))}`);
             const before = testResults.length;
-            await runFile(file, pluginName);
+            await runFile(file, pluginName, fileReuse === false);
             const failed = testResults.slice(before).find(r => !r.skipped && !r.passed);
             if (failed) {
                 throw new Error(`Preflight test "${failed.testName}" failed (plugin ${pluginName}): ${failed.error?.message ?? 'unknown error'}`);
@@ -211,16 +239,26 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         }
 
         // Suite: plugin tests that run alongside user specs, tagged with the plugin's name.
-        for (const { file, pluginName } of plugins.testFiles('suite')) {
+        for (const { file, pluginName, reuse: fileReuse } of plugins.testFiles('suite')) {
             console.log(`\n${pc.blue(pc.bold(`Running tests from: ${file} ${pc.dim(`(plugin ${pluginName})`)}`))}`);
-            await runFile(file, pluginName);
+            await runFile(file, pluginName, fileReuse === false);
         }
 
     } finally {
         await plugins.runCleanup(session, 'session');
         await plugins.teardown();
+        // Registry-owned bots first: it disconnects and forgets each entry, so the plain
+        // sweep after it only has to deal with whatever was never handed to the registry.
+        await session.players.disconnectAll();
         await session.disconnectAllBots();
         await env.teardown();
+
+        if (reuse.enabled) {
+            const reusedCount = testResults.filter(r => r.reuse?.reused).length;
+            if (reusedCount > 0) {
+                console.log(pc.dim(`[Reuse] ${reusedCount} test(s) reused an existing connection instead of reconnecting`));
+            }
+        }
 
         if (config.reports?.json) {
             writeJsonReport(config.reports.json, config.environment.name, testResults);

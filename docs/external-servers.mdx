@@ -94,6 +94,12 @@ That is a request for a specific identity, not for whatever is free — so nothi
 A leased account comes back with the previous test's inventory, balance and op status. Nothing resets it for you. Reset what you can in a plugin's `beforeEach`, exclude what you can't, and treat `capabilities.freshState = false` as the honest description it is.
 </Warning>
 
+## Reuse and the account pool
+
+With `tests.reuse` on ([Configuration](/configuration)), a registry entry holds its leased account for as long as the entry lives, not just for one test — an account checked out by a long-lived player doesn't return to the pool until that player is evicted, invalidated, or the run ends. Size `accounts { }` accordingly: `maxPlayers` defaults to the pool's capacity minus one so a test's own `createPlayer()` still has a spare slot, but a pool exactly as big as `maxPlayers` leaves nothing free for it.
+
+An environment that can't tolerate a bot sitting connected between tests — an idle-kick timeout, a per-test world reset — should report `capabilities.playerReuse = false` after `setup()` rather than let reuse quietly misbehave. See [Writing a Mode](/custom-modes).
+
 ## Checking the stand before you test
 
 ```bash

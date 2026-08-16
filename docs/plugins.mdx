@@ -32,11 +32,12 @@ export interface PlugwrightPlugin<O = unknown> {
     apiVersion?: number;
     setup?(ctx: { session, env, options: O }): Promise<void> | void;
     onPlayerCreate?(player, ctx: { account, env }): Promise<void> | void;
+    onPlayerReuse?(player, ctx: { account, env }): Promise<void> | void;
     beforeEach?(ctx: TestContext): Promise<void> | void;
     afterEach?(ctx: TestContext): Promise<void> | void;
     extendContext?(ctx: TestContext): Record<string, unknown> | void;
     matchers?: Record<string, MatcherFn>;
-    tests?: Array<{ file: string; mode: 'preflight' | 'suite' }>;
+    tests?: Array<{ file: string; mode: 'preflight' | 'suite'; reuse?: false }>;
     cleanup?(ctx: { session, scope: 'session' | 'manual' }): Promise<void> | void;
     teardown?(): Promise<void> | void;
 }
@@ -70,6 +71,24 @@ export default definePlugin({
 ```
 
 `onPlayerCreate` fires on every connection: the first bot of a test, a second bot from `createPlayer()`, every `player.rejoin()`, and the admin-bot console channel. A "log in first" test fires once, in whatever order the spec files happen to load, and leaves every other connection unauthenticated. If you want the visible reassurance of a login test in the report, ship one as a `preflight` test alongside the hook.
+
+## Reuse
+
+```ts
+export interface PlugwrightPlugin<O = unknown> {
+    onPlayerReuse?(player, ctx: { account, env }): Promise<void> | void;
+}
+```
+
+Fires before a reused player is handed to the next test — never on the first connection, where `onPlayerCreate` already runs. By the time it fires, the core has already done its own safe minimum (closing a leftover open window); anything beyond that — clearing a hotbar, resetting a scoreboard value your plugin tracks — is yours to do here. See [Writing Tests](/writing-tests) for the test-side `reuse` option and ability labels.
+
+An auth plugin's preflight exists to prove the login flow runs, so a reused, already-authenticated player would defeat the point:
+
+```ts
+tests: [{ file: join(__dirname, 'auth.spec.js'), mode: 'preflight', reuse: false }]
+```
+
+`PluginTestRef.reuse: false` forces every test in that file onto a fresh connection, regardless of the run's own `reuse` setting.
 
 ## Inherited tests
 

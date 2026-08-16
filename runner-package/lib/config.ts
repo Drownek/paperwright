@@ -31,6 +31,17 @@ export interface EnvironmentConfig {
     config: Record<string, unknown>;
 }
 
+/** Settings for reusing a connected bot across test boundaries instead of reconnecting for
+ *  every test. Absent, or `enabled: false`, is the pre-reuse behavior: connect → test →
+ *  disconnect, every time. */
+export interface ReuseConfig {
+    enabled: boolean;
+    /** Live registry entries allowed at once. Defaults to 4, or `AccountPool` capacity minus
+     *  one when the environment has a pool — one slot is kept free for a test's own
+     *  `createPlayer()` call. */
+    maxPlayers?: number | null;
+}
+
 export interface TestsConfig {
     /** Directory scanned for compiled spec files. Defaults to the working directory. */
     dir?: string | null;
@@ -42,6 +53,7 @@ export interface TestsConfig {
     names?: string[] | null;
     /** Per-test timeout; falls back to TEST_TIMEOUT and then to 30s. */
     timeoutMs?: number | null;
+    reuse?: ReuseConfig | null;
 }
 
 export interface ReportsConfig {
@@ -188,10 +200,15 @@ function configFromEnvironment(): RunnerConfig {
  */
 export function loadRunnerConfig(argv: string[] = process.argv.slice(2)): RunnerConfig {
     const flagPath = readConfigFlag(argv);
-    if (flagPath) {
-        return readConfigFile(isAbsolute(flagPath) ? flagPath : resolve(process.cwd(), flagPath));
-    }
+    const config = flagPath
+        ? readConfigFile(isAbsolute(flagPath) ? flagPath : resolve(process.cwd(), flagPath))
+        : loadDefaultOrLegacyConfig();
 
+    applyReuseEnvOverride(config);
+    return config;
+}
+
+function loadDefaultOrLegacyConfig(): RunnerConfig {
     const defaultPath = resolve(process.cwd(), DEFAULT_CONFIG_FILENAME);
     try {
         readFileSync(defaultPath);
@@ -199,6 +216,20 @@ export function loadRunnerConfig(argv: string[] = process.argv.slice(2)): Runner
     } catch {
         return configFromEnvironment();
     }
+}
+
+/** `PLUGWRIGHT_REUSE` overrides `tests.reuse.enabled` from a committed config file — the
+ *  toggle for a dev's own edit loop, so reuse never has to live in a checked-in build script
+ *  just to be tried locally. `1`/`true` enables it, `0`/`false` disables it; anything else, or
+ *  unset, leaves the config's own value alone. */
+function applyReuseEnvOverride(config: RunnerConfig): void {
+    const raw = process.env.PLUGWRIGHT_REUSE;
+    if (raw === undefined) return;
+    const enabled = raw === '1' || raw.toLowerCase() === 'true';
+    const disabled = raw === '0' || raw.toLowerCase() === 'false';
+    if (!enabled && !disabled) return;
+
+    config.tests.reuse = { ...config.tests.reuse, enabled };
 }
 
 /** True when [value] is a secret pointer rather than a plain value. */

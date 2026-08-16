@@ -49,6 +49,17 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
     @get:Optional
     abstract val excludeTests: ListProperty<String>
 
+    /** From `plugwright.reuse.enabled`. Unset means "reuse off", matching a config with no
+     *  `tests.reuse` key at all. */
+    @get:Input
+    @get:Optional
+    abstract val reuseEnabled: Property<Boolean>
+
+    /** From `plugwright.reuse.maxPlayers`. Unset means "runner default". */
+    @get:Input
+    @get:Optional
+    abstract val reuseMaxPlayers: Property<Int>
+
     /**
      * The mode-specific part of the runner config (`environment.config`). Set by the plugin
      * from either [me.drownek.plugwright.api.PlugwrightMode.serialize] or the mode's own
@@ -130,6 +141,8 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
             journalFile = journalFile.orNull?.asFile,
             runtimePackage = runtimePackage.orNull,
             runtimeExport = runtimeExport.orNull,
+            reuseEnabled = reuseEnabled.orNull,
+            reuseMaxPlayers = reuseMaxPlayers.orNull,
         )
         RunnerLauncher.writeConfig(entry)
         logger.lifecycle("Runner config: ${configDestination.absolutePath}")
