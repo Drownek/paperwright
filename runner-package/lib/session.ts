@@ -78,10 +78,31 @@ export class Session {
             username: options.username,
             version: options.version,
             auth: options.auth,
+            // mineflayer's own default (logErrors: true) does `bot.on('error', e =>
+            // console.log(e))` unconditionally — fine for an occasional bad packet, but a
+            // server sending something outside the client's protocol data (e.g. a particle
+            // type minecraft-data doesn't recognise for this version) can emit that error
+            // hundreds of times a second. Full exceptions logged synchronously at that rate
+            // starve the event loop and the piped stdout, so timers that would otherwise
+            // fail the test fast stop firing in any useful time. Handled below instead, with
+            // logging throttled so the connection survives being spammed by a packet type it
+            // can't decode.
+            logErrors: false,
             ...(options.profilesFolder ? { profilesFolder: options.profilesFolder } : {}),
         });
 
         this.bots.push(bot);
+
+        let errorCount = 0;
+        let lastLoggedAt = 0;
+        bot.on('error', (err: Error) => {
+            errorCount++;
+            const now = Date.now();
+            if (now - lastLoggedAt > 1000) {
+                console.log(pc.dim(`[Bot] ${options.username} error (${errorCount} so far): ${err.message}`));
+                lastLoggedAt = now;
+            }
+        });
 
         bot.once('end', (reason: string) => {
             console.log(pc.dim(`[Bot] ${options.username} connection ended: ${reason}`));
