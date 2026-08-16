@@ -46,9 +46,22 @@ export interface TestCase {
 export const testRegistry: TestCase[] = [];
 export const scopeStack: DescribeScope[] = [{ label: '', beforeHooks: [], afterHooks: [] }];
 
+/** A reuseTest's body, keyed by the reuse `key` ("pool") it initializes. */
+export interface ReuseTestCase {
+    pool: string;
+    name: string;
+    fn: TestFn;
+}
+
+/** One reuseTest per pool, kept for the whole run rather than reset per spec file —
+ *  `PlayerRegistry` entries live for the whole run too, so a pool declared in one file must
+ *  still be found when a later file is the first to actually create that entry. */
+export const reuseTestRegistry = new Map<string, ReuseTestCase>();
+
 /** Discards whatever a previously-imported spec file registered, ready for the next one.
  *  `testRegistry`/`scopeStack` stay module-level with this per-file reset — correct only
- *  as long as one process runs one environment and files run sequentially. */
+ *  as long as one process runs one environment and files run sequentially. `reuseTestRegistry`
+ *  is deliberately NOT cleared here — see its own comment. */
 export function resetRegistry(): void {
     testRegistry.length = 0;
     scopeStack.length = 0;
@@ -98,6 +111,25 @@ export function opTest(name: string, fnOrOptions: TestFn | TestOptions, maybeFn?
         if (!context.player.abilities.has('op')) await context.player.makeOp();
         await fn(context);
     });
+}
+
+/**
+ * Registers a one-time initializer for a reuse pool. `pool` is the same string a test passes
+ * as `reuse: 'poolName'` (or `reuse: { key: 'poolName' }`) — `reuseTest` runs `fn` against that
+ * pool's player right when `PlayerRegistry` (re)creates its entry: the very first time any test
+ * asks for `poolName`, or later if that entry was dropped (rejoin failed, abilities stopped
+ * matching) and needs to be built again. It does NOT run on an ordinary checkout of an
+ * already-live entry — that's every other call, which is the common case.
+ *
+ * Runs as its own reported test, right before whichever test triggered the (re)creation. If
+ * `fn` throws, that test fails as a dependency failure and the entry is discarded, so the next
+ * attempt runs `reuseTest` again instead of handing out a half-initialized player.
+ */
+export function reuseTest(pool: string, fn: TestFn): void {
+    if (reuseTestRegistry.has(pool)) {
+        throw new Error(`reuseTest: pool "${pool}" is already registered (reuseTest can only be declared once per pool)`);
+    }
+    reuseTestRegistry.set(pool, { pool, name: `reuse:${pool}`, fn });
 }
 
 export function describe(label: string, fn: () => void): void {

@@ -94,14 +94,22 @@ export class PlayerRegistry {
         return this.entries.map(e => e.player.bot);
     }
 
-    async resolve(options: ReuseOptions, connect: () => Promise<ConnectedPlayer>): Promise<ResolveResult> {
+    /** `onFreshEntry` fires exactly when this call ends up creating a brand-new entry —
+     *  first-ever request for a key, or a rebuild after a drop — never on a plain checkout of
+     *  an entry that's already live. A rejected `onFreshEntry` discards the entry it just built,
+     *  same as a broken connection would, and the rejection propagates to the caller. */
+    async resolve(
+        options: ReuseOptions,
+        connect: () => Promise<ConnectedPlayer>,
+        onFreshEntry?: (key: string, player: PlayerWrapper) => Promise<void>,
+    ): Promise<ResolveResult> {
         if (options.key) {
             const existing = this.entries.find(e => e.key === options.key);
             if (existing) {
                 if (matches(existing, options)) return this.checkout(existing, connect);
                 await this.drop(existing, `abilities don't match a new request for key "${options.key}"`);
             }
-            return this.createEntry(options.key, connect);
+            return this.createEntry(options.key, connect, onFreshEntry);
         }
 
         const free = this.entries.find(e => !e.checkedOut && matches(e, options));
@@ -120,7 +128,7 @@ export class PlayerRegistry {
             await this.drop(victim, `evicted: maxPlayers=${this.maxPlayers} reached`);
         }
 
-        return this.createEntry(derivedKey(options), connect);
+        return this.createEntry(derivedKey(options), connect, onFreshEntry);
     }
 
     /** Returns a checked-out entry to the free pool. `stay: false` parks it on the way out —
@@ -179,10 +187,25 @@ export class PlayerRegistry {
         return { player: entry.player, key: entry.key, reused: true };
     }
 
-    private async createEntry(key: string, connect: () => Promise<ConnectedPlayer>): Promise<ResolveResult> {
+    private async createEntry(
+        key: string,
+        connect: () => Promise<ConnectedPlayer>,
+        onFreshEntry?: (key: string, player: PlayerWrapper) => Promise<void>,
+    ): Promise<ResolveResult> {
         const { player, account, pool } = await connect();
-        this.entries.push({ key, player, account, pool, checkedOut: true, parked: false, lastUsedAt: Date.now() });
+        const entry: RegistryEntry = { key, player, account, pool, checkedOut: true, parked: false, lastUsedAt: Date.now() };
+        this.entries.push(entry);
         console.log(pc.dim(`[Reuse] ${player.username} new player (key "${key}")`));
+
+        if (onFreshEntry) {
+            try {
+                await onFreshEntry(key, player);
+            } catch (error) {
+                await this.drop(entry, `reuseTest failed: ${(error as Error).message}`);
+                throw error;
+            }
+        }
+
         return { player, key, reused: false };
     }
 
