@@ -31,11 +31,13 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@11.5.1
 
-      - name: Publish NPM package
-        working-directory: runner-package
+      # The plugin packages link the runner through `file:../runner-package`, so they are
+      # installed together rather than one directory at a time. Each package builds itself
+      # from `prepublishOnly`, and the script publishes all three.
+      - name: Publish NPM packages
         run: |
-          npm ci
-          npm publish --access public --provenance
+          npm run install:packages
+          npm run publish:packages -- --provenance
 
       - name: Publish Gradle plugin
         working-directory: gradle-plugin
@@ -44,5 +46,5 @@ jobs:
           GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
         run: |
           chmod +x gradlew
-          ./gradlew publishPlugins
+          ./gradlew publishToPublicRepository
 
