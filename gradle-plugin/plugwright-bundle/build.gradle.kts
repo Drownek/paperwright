@@ -79,7 +79,7 @@ publishing {
     repositories {
         if (publishUrl.isPresent) {
             maven {
-                name = "plugwright"
+                name = "private"
                 url = uri(publishUrl.get())
 
                 // A repository that lets anyone write is its own kind of problem, but it is
@@ -91,6 +91,79 @@ publishing {
                     }
                 }
             }
+        }
+    }
+}
+
+// Either destination can be switched off, and neither being available is a normal state
+// rather than a failure.
+//
+// The public one is on by default: it is where a release goes. The private one is off until a
+// repository is named, because most builds have none — a build that never opted in has nothing
+// to publish privately, and treating that as an error would make `publishToPrivateRepository`
+// fail on every checkout that has not been set up.
+//
+// The explicit properties exist for the case the implicit rule gets wrong: a fork that
+// publishes only inside a company wants the public one off, and a machine that has the private
+// URL in its environment for resolving may still want to publish nowhere.
+val publicEnabled = providers.gradleProperty("plugwright.publish.public.enabled")
+    .orElse(providers.environmentVariable("PLUGWRIGHT_PUBLISH_PUBLIC_ENABLED"))
+    .map { it.toBoolean() }
+    .orElse(true)
+val privateEnabled = providers.gradleProperty("plugwright.publish.private.enabled")
+    .orElse(providers.environmentVariable("PLUGWRIGHT_PUBLISH_PRIVATE_ENABLED"))
+    .map { it.toBoolean() }
+    .orElse(publishUrl.map { true })
+    .orElse(false)
+
+// The two destinations under one pair of names, so a release reads the same whichever it is
+// going to. Both wrap tasks that already exist — `publishPlugins` from the plugin-publish
+// plugin, and the publication task Gradle derives from the repository above.
+//
+// The switch goes on the wrapped task, not on the wrapper: `onlyIf` skips the task it is set
+// on and nothing it depends on, so a wrapper that skipped itself would still have run the
+// publish underneath it.
+tasks.named("publishPlugins") {
+    onlyIf { publicEnabled.get() }
+}
+
+tasks.register("publishToPublicRepository") {
+    group = "publishing"
+    description = "Publishes the plugin to the Gradle Plugin Portal, unless it is switched off."
+    dependsOn(tasks.named("publishPlugins"))
+
+    doLast {
+        if (!publicEnabled.get()) {
+            logger.lifecycle("Public publishing is off (plugwright.publish.public.enabled=false).")
+        }
+    }
+}
+
+if (publishUrl.isPresent) {
+    tasks.named("publishAllPublicationsToPrivateRepository") {
+        onlyIf { privateEnabled.get() }
+    }
+}
+
+tasks.register("publishToPrivateRepository") {
+    group = "publishing"
+    description = "Publishes the plugin to the maven repository named by plugwright.publish.url, when there is one."
+
+    if (publishUrl.isPresent) {
+        dependsOn(tasks.named("publishAllPublicationsToPrivateRepository"))
+    }
+
+    // Says why it did nothing rather than failing. The task is registered whether or not a
+    // repository is configured, so a build script and a CI job can name it unconditionally.
+    doLast {
+        if (!publishUrl.isPresent) {
+            logger.lifecycle(
+                "No private repository configured, nothing published. Set plugwright.publish.url " +
+                "(or PLUGWRIGHT_PUBLISH_URL), plus plugwright.publish.user and " +
+                "plugwright.publish.password if the repository asks for them."
+            )
+        } else if (!privateEnabled.get()) {
+            logger.lifecycle("Private publishing is off (plugwright.publish.private.enabled=false).")
         }
     }
 }
