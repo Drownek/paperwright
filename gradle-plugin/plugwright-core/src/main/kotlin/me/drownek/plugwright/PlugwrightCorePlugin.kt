@@ -2,11 +2,15 @@ package me.drownek.plugwright
 
 import me.drownek.plugwright.api.ConfigNodeBuilder
 import org.gradle.api.GradleException
+import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.TaskProvider
+import org.gradle.plugins.ide.idea.model.IdeaModel
+import org.jetbrains.gradle.ext.ProjectSettings
+import org.jetbrains.gradle.ext.TaskTriggersConfig
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -56,8 +60,34 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
         registerInitTask(project, extension, defaultNodeInstallDir)
 
+        registerIdeaSyncTrigger(project, plugwrightCompileTests)
+
         project.afterEvaluate {
             wireEnvironments(project, extension, plugwrightCompileTests, defaultNodeInstallDir)
+        }
+    }
+
+    /**
+     * Runs the compile task after an IntelliJ IDEA sync, so a fresh checkout has its
+     * `node_modules` and its compiled specs before anyone opens a spec file and finds every
+     * import unresolved.
+     *
+     * Only when the project already applies the `idea` plugin — `idea-ext` is what carries
+     * `afterSync`, and applying it unconditionally would push a plugin onto builds that never
+     * asked for one.
+     */
+    private fun registerIdeaSyncTrigger(
+        project: Project,
+        plugwrightCompileTests: TaskProvider<PlugwrightCompileTestsTask>,
+    ) {
+        project.plugins.withId("idea") {
+            project.pluginManager.apply("org.jetbrains.gradle.plugin.idea-ext")
+            project.afterEvaluate {
+                val ideaModel = project.extensions.findByType(IdeaModel::class.java) ?: return@afterEvaluate
+                val ideaProject = ideaModel.project as? ExtensionAware
+                val settings = ideaProject?.extensions?.findByType(ProjectSettings::class.java) as? ExtensionAware
+                settings?.extensions?.findByType(TaskTriggersConfig::class.java)?.afterSync(plugwrightCompileTests)
+            }
         }
     }
 

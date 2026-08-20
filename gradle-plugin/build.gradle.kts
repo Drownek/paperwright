@@ -6,6 +6,8 @@ allprojects {
 
     repositories {
         mavenCentral()
+        // The idea-ext plugin marker plugwright-core compiles against lives here, not in Central.
+        gradlePluginPortal()
     }
 }
 

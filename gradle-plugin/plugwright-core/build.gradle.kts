@@ -7,6 +7,9 @@ val projectVersion = version.toString()
 dependencies {
     implementation(gradleApi())
     implementation("com.google.code.gson:gson:2.10.1")
+    // Carries `afterSync`, used to run the compile task after an IntelliJ sync. Applied to a
+    // consumer's build only when that build already applies the `idea` plugin.
+    implementation("org.jetbrains.gradle.plugin.idea-ext:org.jetbrains.gradle.plugin.idea-ext.gradle.plugin:1.4.1")
 
     // The api module has no separate published coordinates yet, so its classes are
     // merged into this jar below. compileOnly keeps it out of the published POM.
