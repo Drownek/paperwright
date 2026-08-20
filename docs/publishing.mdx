@@ -1,0 +1,146 @@
+---
+title: "Publishing Plugwright"
+description: "Release the packages and the gradle plugin to npmjs and the Plugin Portal, or to a registry of your own."
+---
+
+This page is for people releasing Plugwright itself, or running a fork of it inside an
+organisation. If you are writing tests for your own plugin you want [Quickstart](/quickstart)
+instead.
+
+Plugwright ships as four artifacts that move as one version:
+
+| Artifact | Kind | Public home |
+| --- | --- | --- |
+| `@drownek/plugwright` | npm | npmjs.com |
+| `@plugwright/auth-authme` | npm | npmjs.com |
+| `@plugwright/console-rcon` | npm | npmjs.com |
+| `io.github.drownek.plugwright` | gradle plugin | Gradle Plugin Portal |
+
+Both destinations — the public one and a private one — use the same two commands. What
+changes is the environment they run in.
+
+## A public release
+
+Tagging a commit `v*` runs `.github/workflows/release.yml`, which does the whole thing. To
+do it by hand:
+
+```bash
+npm run install:packages
+npm run publish:packages
+
+cd gradle-plugin
+./gradlew publishToPublicRepository
+```
+
+`publish:packages` with nothing configured publishes all three npm packages to npmjs.com. It
+uses whatever credentials npm already has, so an `npm login` session or an `NPM_TOKEN` is
+enough; in CI it is the OIDC token the job was issued, which is also what makes
+`--provenance` work.
+
+`publishToPublicRepository` is the Gradle Plugin Portal, and reads `GRADLE_PUBLISH_KEY` and
+`GRADLE_PUBLISH_SECRET` the way the `plugin-publish` plugin always has.
+
+## Publishing to your own registry
+
+An organisation that cannot reach npmjs.com or the Plugin Portal — an air-gapped build farm,
+or one that only resolves through a mirror — needs these artifacts somewhere its builds can
+reach. Nothing about that registry is written into the repository: a URL in a `package.json`
+or a build script would send the *public* release there too, and a password in either would
+be a password in version control. Both come from the environment instead.
+
+Copy `.env.example` to `.env` and fill in what applies. `.env` is ignored by git.
+
+```bash
+PLUGWRIGHT_NPM_REGISTRY=https://registry.example.com/repository/npm-hosted/
+PLUGWRIGHT_NPM_USER=deploy
+PLUGWRIGHT_NPM_PASSWORD=...
+
+PLUGWRIGHT_PUBLISH_URL=https://repo.example.com/repository/maven-releases/
+PLUGWRIGHT_PUBLISH_USER=deploy
+PLUGWRIGHT_PUBLISH_PASSWORD=...
+```
+
+Then the same two commands, pointed elsewhere:
+
+```bash
+npm run publish:packages
+
+cd gradle-plugin
+./gradlew publishToPrivateRepository
+```
+
+<Note>
+Leave the user and password unset for a registry that accepts anonymous deploys, or one that
+authenticates through an `.npmrc` you already have. The credentials are only used when both
+are given.
+</Note>
+
+### Switching a destination off
+
+Neither destination is mandatory, and neither being available is a normal state rather than a
+failure.
+
+Private publishing is off until `plugwright.publish.url` names a repository. Without one,
+`publishToPrivateRepository` succeeds, publishes nothing, and says why — so a build script or a
+CI job can name the task unconditionally without every un-configured checkout failing on it.
+
+Public publishing is on by default, since that is where a release goes. Turn either off
+explicitly when the implicit rule gets it wrong — a fork that publishes only inside a company
+wants the public one off, and a machine that has the private URL in its environment for
+*resolving* may still want to publish nowhere:
+
+```bash
+./gradlew publishToPublicRepository  -Pplugwright.publish.public.enabled=false
+./gradlew publishToPrivateRepository -Pplugwright.publish.private.enabled=false
+```
+
+Both also read `PLUGWRIGHT_PUBLISH_PUBLIC_ENABLED` and `PLUGWRIGHT_PUBLISH_PRIVATE_ENABLED`.
+A switched-off destination reports its publish task as `SKIPPED`.
+
+On the npm side the same rule falls out of the configuration: with no `PLUGWRIGHT_NPM_REGISTRY`
+the packages go to npmjs, and a private registry is used only when one is named.
+
+The npm credentials are written to a temporary npm config outside the working tree and passed
+with `--userconfig`, then deleted whether the publish worked or not. They go in as a Basic
+`_auth` pair rather than a bearer `_authToken`, because some registries — Nexus among them —
+answer a bearer token with `401`.
+
+### Settings
+
+Everything below can be given as an environment variable or as a flag to
+`npm run publish:packages -- --flag value`. Flags win.
+
+| Variable | Flag | Default |
+| --- | --- | --- |
+| `PLUGWRIGHT_NPM_REGISTRY` | `--registry` | npmjs.com |
+| `PLUGWRIGHT_NPM_USER` | `--user` | npm's own credentials |
+| `PLUGWRIGHT_NPM_PASSWORD` | `--password` | npm's own credentials |
+| `PLUGWRIGHT_NPM_TAG` | `--tag` | `latest` |
+| `PLUGWRIGHT_NPM_ACCESS` | `--access` | `public` |
+| `PLUGWRIGHT_NPM_PROVENANCE` | `--provenance` | off |
+
+`--dry-run` packs every package and reports what would be sent, without sending it. Worth
+running once against a new registry before the real thing, since most registries refuse to
+overwrite a release.
+
+The gradle side takes gradle properties as well as environment variables:
+`plugwright.publish.url`, `plugwright.publish.user`, `plugwright.publish.password`, and the two
+`.enabled` switches above.
+
+## Consuming a private registry
+
+Publishing is one half. The builds that resolve these artifacts need to be pointed at the
+same places — an `npm { registry(...) }` block for the packages and a `pluginManagement`
+repository for the plugin. That is covered in
+[Private npm registries](/ci-cd#private-npm-registries) and
+[Configuration](/configuration).
+
+## Moving the version
+
+All four artifacts carry one version, kept in `version.txt`. `npm run bump` moves it
+everywhere at once — the three `package.json` files and the lockfiles that record the
+runner's version, plus the README, the quickstart and the example plugin for a stable
+release — then tags the commit.
+
+Publish after the tag, not before: most registries refuse to overwrite a release that already
+exists, so a version published from a half-finished tree cannot be re-published.
