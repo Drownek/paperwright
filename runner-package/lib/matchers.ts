@@ -51,8 +51,11 @@ export class RunnerMatchers<T = unknown> extends Matchers<T> {
         const expected = !this.isNot;
         const deadline = Date.now() + timeout;
 
-        while (Date.now() < deadline) {
+        // Deadline last, as in `poll`: the condition is checked once more after the final
+        // wait, so a message that lands during it still counts.
+        for (;;) {
             if (condition() === expected) return;
+            if (Date.now() >= deadline) break;
             await new Promise(resolve => setTimeout(resolve, pollingRate));
         }
 
@@ -195,7 +198,8 @@ export class PollMatchers<T> {
         const deadline = Date.now() + timeout;
         let lastError: unknown;
 
-        while (Date.now() < deadline) {
+        // Deadline last, as in `poll`: one more attempt after the final wait.
+        for (;;) {
             const value = await this.fn();
             try {
                 const m = new Matchers(value, this.isNot);
@@ -204,6 +208,7 @@ export class PollMatchers<T> {
             } catch (e) {
                 lastError = e;
             }
+            if (Date.now() >= deadline) break;
             await sleep(Math.min(interval, Math.max(0, deadline - Date.now())));
         }
 
