@@ -242,6 +242,11 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
             if (openWindow) {
                 try { result.player.bot.closeWindow(openWindow); } catch { /* best effort */ }
             }
+
+            // `rejoin` clears the buffer on its way back in, but a player checked out under
+            // `stay` never left and so never rejoined: without this, the chat it saw in the
+            // previous test would still satisfy assertions in this one.
+            result.player.clearMessages();
             await plugins.onPlayerReuse(result.player, { account: result.player.account!, env: session.env });
         }
 
