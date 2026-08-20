@@ -109,7 +109,7 @@ export default definePlugin<AuthAuthmeOptions>({
         const commandIndex = player.getMessageBufferIndex();
         player.chat(isRegistration
             ? `${resolved.registerCommand} ${password} ${password}`
-            : `${resolved.loginCommand} ${password}`);
+            : `${resolved.loginCommand} ${password}`, { secrets: [password] });
 
         await poll(() => since(commandIndex, successPattern), {
             timeout: resolved.timeoutMs,
@@ -127,7 +127,7 @@ export default definePlugin<AuthAuthmeOptions>({
         if (autoLoggedIn) return;
 
         const loginIndex = player.getMessageBufferIndex();
-        player.chat(`${resolved.loginCommand} ${password}`);
+        player.chat(`${resolved.loginCommand} ${password}`, { secrets: [password] });
         await poll(() => since(loginIndex, authenticated), {
             timeout: resolved.timeoutMs,
             message: `authme: "${account.username}" registered but never logged in`,
