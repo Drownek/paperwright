@@ -3,6 +3,7 @@
   "scripts": {
     "bump": "node scripts/bump-version.js",
     "install:packages": "npm install --prefix runner-package && npm install --prefix auth-authme-package && npm install --prefix console-rcon-package",
-    "build:packages": "npm run build --prefix runner-package && npm run build --prefix auth-authme-package && npm run build --prefix console-rcon-package"
+    "build:packages": "npm run build --prefix runner-package && npm run build --prefix auth-authme-package && npm run build --prefix console-rcon-package",
+    "publish:packages": "node scripts/publish.js"
   }
 }
