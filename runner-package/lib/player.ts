@@ -197,8 +197,26 @@ export class PlayerWrapper {
         return currentWindow ? new GuiWrapper(this.bot, currentWindow as Window) : null;
     }
 
-    chat(message: string): void {
-        console.log(`${pc.cyan('[Bot]')} ${pc.dim(`Chatting: ${message}`)}`);
+    /**
+     * Sends a chat message as this bot.
+     *
+     * `options.secrets` lists values that must not appear in the line this call logs — a
+     * password, a token, anything the caller already holds and knows is sensitive. Each
+     * occurrence of a listed value is replaced in the *logged* copy of `message`; what goes
+     * to the server is untouched.
+     *
+     * The list is the caller's to supply, and an empty one redacts nothing. Guessing which
+     * argument of an arbitrary command is a password would mean this method knowing every
+     * plugin's command shapes, and a guess that misses fails open — it prints the secret. The
+     * caller is the only one who knows, so the caller says so.
+     */
+    chat(message: string, options: { secrets?: string[] } = {}): void {
+        const { secrets = [] } = options;
+        const logged = secrets.reduce(
+            (text, secret) => (secret ? text.split(secret).join('[REDACTED]') : text),
+            message,
+        );
+        console.log(`${pc.cyan('[Bot]')} ${pc.dim(`Chatting: ${logged}`)}`);
         this.bot.chat(message);
     }
 
