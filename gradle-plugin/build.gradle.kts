@@ -1,3 +1,10 @@
+// Loaded once here so every subproject resolves the same Kotlin plugin classes: applying
+// `kotlin-dsl` from each subproject's own plugins block loads the Kotlin plugin several
+// times over, which Gradle warns about and does not support.
+plugins {
+    `kotlin-dsl` apply false
+}
+
 val projectVersion = file("../version.txt").readText().trim()
 
 allprojects {
@@ -12,6 +19,8 @@ allprojects {
 }
 
 subprojects {
+    apply(plugin = "org.gradle.kotlin.kotlin-dsl")
+
     plugins.withId("java") {
         extensions.configure<JavaPluginExtension> {
             toolchain {

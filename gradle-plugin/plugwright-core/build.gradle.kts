@@ -1,7 +1,3 @@
-plugins {
-    `kotlin-dsl`
-}
-
 val projectVersion = version.toString()
 
 dependencies {

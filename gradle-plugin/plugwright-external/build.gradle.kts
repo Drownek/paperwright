@@ -1,7 +1,3 @@
-plugins {
-    `kotlin-dsl`
-}
-
 dependencies {
     implementation(gradleApi())
     implementation(project(":plugwright-core"))
