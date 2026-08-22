@@ -115,25 +115,30 @@ export class PlayerWrapper {
         if (this._listenersBot === this.bot) return;
         this._listenersBot = this.bot;
 
-        const botUsername = this.username;
+        // Read on each line, not captured here: `username` is `bot.username`, which stays
+        // undefined until the client is through the handshake (see `_captureSpawnPromise`,
+        // which reads it the same way). A snapshot taken here is what put "[Bot undefined]"
+        // in front of chat lines — including every line a login wall produces, which are the
+        // ones worth reading when authentication goes wrong.
+        const botUsername = (): string | undefined => this.bot.username;
         const bot = this.bot;
 
         bot.on('message', (jsonMsg: unknown) => {
             const message = String(jsonMsg);
-            console.log(pc.dim(`[Bot ${botUsername}] Received message: "${message}"`));
+            console.log(pc.dim(`[Bot ${botUsername()}] Received message: "${message}"`));
             this.messageBuffer.push(message);
         });
 
         bot.on('windowOpen', (window: unknown) => {
             if (process.env.PLUGWRIGHT_DEBUG !== '1') return;
             const win = window as { title?: string; type?: string | number; slots?: unknown[] };
-            console.log(pc.gray(`[DEBUG] [Bot ${botUsername}] Global windowOpen event - Title: "${win.title}", Type: ${win.type}, SlotCount: ${win.slots?.length}`));
+            console.log(pc.gray(`[DEBUG] [Bot ${botUsername()}] Global windowOpen event - Title: "${win.title}", Type: ${win.type}, SlotCount: ${win.slots?.length}`));
         });
 
         bot.on('windowClose', (window: unknown) => {
             if (process.env.PLUGWRIGHT_DEBUG !== '1') return;
             const win = window as { title?: string };
-            console.log(pc.gray(`[DEBUG] [Bot ${botUsername}] windowClose event - Window: ${win?.title || 'unknown'}`));
+            console.log(pc.gray(`[DEBUG] [Bot ${botUsername()}] windowClose event - Window: ${win?.title || 'unknown'}`));
         });
     }
 
