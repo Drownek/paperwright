@@ -441,21 +441,8 @@ export function createPlayerExtensions(bot: Bot) {
             const { timeout = 5000, pollingRate = 100 } = options;
             const startTime = Date.now();
 
-            return new Promise((resolve, reject) => {
-                const checkForItem = () => {
-                    const elapsed = Date.now() - startTime;
-
-                    if (elapsed >= timeout) {
-                        clearInterval(pollInterval);
-                        reject(new Error(`[Player] Timeout waiting for GUI item (${timeout}ms)`));
-                        return;
-                    }
-
-                    // Check if there's a current window open
-                    if (!bot.currentWindow) {
-                        return; // Continue polling
-                    }
-
+            for (;;) {
+                if (bot.currentWindow) {
                     const window = bot.currentWindow as Window;
                     const items = window.slots
                         .filter((item): item is RawItem => item != null)
@@ -464,18 +451,17 @@ export function createPlayerExtensions(bot: Bot) {
                     const matchedItem = items.find(itemMatcher);
 
                     if (matchedItem) {
-                        clearInterval(pollInterval);
                         console.log(`[Player] Found GUI item: ${matchedItem.getDisplayName()} at slot ${matchedItem.slot}`);
-                        resolve(matchedItem);
+                        return matchedItem;
                     }
-                };
+                }
 
-                // Start polling
-                const pollInterval = setInterval(checkForItem, pollingRate);
+                if (Date.now() - startTime >= timeout) {
+                    throw new Error(`[Player] Timeout waiting for GUI item (${timeout}ms)`);
+                }
 
-                // Initial check
-                checkForItem();
-            });
+                await new Promise(resolve => setTimeout(resolve, pollingRate));
+            }
         },
 
         async clickGuiItem(
@@ -487,20 +473,8 @@ export function createPlayerExtensions(bot: Bot) {
             const { timeout = 5000, pollingRate = 100 } = options;
             const startTime = Date.now();
 
-            return new Promise((resolve, reject) => {
-                const checkForItem = async () => {
-                    const elapsed = Date.now() - startTime;
-
-                    if (elapsed >= timeout) {
-                        clearInterval(pollInterval);
-                        reject(new Error(`[Player] Timeout waiting for GUI item to click (${timeout}ms)`));
-                        return;
-                    }
-
-                    if (!bot.currentWindow) {
-                        return;
-                    }
-
+            for (;;) {
+                if (bot.currentWindow) {
                     const window = bot.currentWindow as Window;
                     const items = window.slots
                         .filter((item): item is RawItem => item != null)
@@ -509,8 +483,6 @@ export function createPlayerExtensions(bot: Bot) {
                     const matchedItem = items.find(itemMatcher);
 
                     if (matchedItem) {
-                        clearInterval(pollInterval);
-
                         const lore = matchedItem.getLore();
                         console.log(`[Player] Clicking GUI item: ${matchedItem.getDisplayName()}`);
                         console.log(`  Material: ${matchedItem.name}`);
@@ -519,19 +491,17 @@ export function createPlayerExtensions(bot: Bot) {
                             console.log(`  Lore: ${lore.join(' | ')}`);
                         }
 
-                        try {
-                            await bot.clickWindow(matchedItem.slot, 0, 0);
-                            resolve();
-                        } catch (error) {
-                            reject(error);
-                        }
+                        await bot.clickWindow(matchedItem.slot, 0, 0);
+                        return;
                     }
-                };
+                }
 
-                const pollInterval = setInterval(checkForItem, pollingRate);
+                if (Date.now() - startTime >= timeout) {
+                    throw new Error(`[Player] Timeout waiting for GUI item to click (${timeout}ms)`);
+                }
 
-                checkForItem();
-            });
+                await new Promise(resolve => setTimeout(resolve, pollingRate));
+            }
         },
 
         async waitForGui(
