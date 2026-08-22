@@ -75,6 +75,11 @@ class PlugwrightCorePlugin : Plugin<Project> {
      * Only when the project already applies the `idea` plugin — `idea-ext` is what carries
      * `afterSync`, and applying it unconditionally would push a plugin onto builds that never
      * asked for one.
+     *
+     * That plugin does not always show up while the project is being configured: an IDEA sync
+     * applies it to an already-evaluated project, and `Project.afterEvaluate` throws once that
+     * has happened. So the trigger is wired right away in that case and deferred only while
+     * configuration is still running.
      */
     private fun registerIdeaSyncTrigger(
         project: Project,
@@ -82,13 +87,26 @@ class PlugwrightCorePlugin : Plugin<Project> {
     ) {
         project.plugins.withId("idea") {
             project.pluginManager.apply("org.jetbrains.gradle.plugin.idea-ext")
-            project.afterEvaluate {
-                val ideaModel = project.extensions.findByType(IdeaModel::class.java) ?: return@afterEvaluate
-                val ideaProject = ideaModel.project as? ExtensionAware
-                val settings = ideaProject?.extensions?.findByType(ProjectSettings::class.java) as? ExtensionAware
-                settings?.extensions?.findByType(TaskTriggersConfig::class.java)?.afterSync(plugwrightCompileTests)
+            if (project.state.executed) {
+                wireIdeaSyncTrigger(project, plugwrightCompileTests)
+            } else {
+                project.afterEvaluate { wireIdeaSyncTrigger(project, plugwrightCompileTests) }
             }
         }
+    }
+
+    /**
+     * The `taskTriggers` block lives on the root project's `idea.project.settings`, so on a
+     * subproject the lookup finds nothing and the trigger is simply skipped.
+     */
+    private fun wireIdeaSyncTrigger(
+        project: Project,
+        plugwrightCompileTests: TaskProvider<PlugwrightCompileTestsTask>,
+    ) {
+        val ideaModel = project.extensions.findByType(IdeaModel::class.java) ?: return
+        val ideaProject = ideaModel.project as? ExtensionAware
+        val settings = ideaProject?.extensions?.findByType(ProjectSettings::class.java) as? ExtensionAware
+        settings?.extensions?.findByType(TaskTriggersConfig::class.java)?.afterSync(plugwrightCompileTests)
     }
 
     private fun wireEnvironments(
