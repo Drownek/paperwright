@@ -127,20 +127,21 @@ export async function waitForStable(
     const deadline = Date.now() + timeout;
 
     // First, wait until the condition becomes true
-    while (Date.now() < deadline) {
+    for (;;) {
         if (signal?.aborted) throw new Error('Aborted');
         if (await predicate()) break;
-        await sleep(interval, signal);
         if (Date.now() >= deadline) throw new Error(message);
+        await sleep(interval, signal);
     }
 
     // Then, verify it stays true for the entire `duration`
     const stableDeadline = Date.now() + duration;
-    while (Date.now() < stableDeadline) {
+    for (;;) {
         if (signal?.aborted) throw new Error('Aborted');
         if (!(await predicate())) {
             throw new Error(message);
         }
+        if (Date.now() >= stableDeadline) break;
         await sleep(Math.min(interval, Math.max(0, stableDeadline - Date.now())), signal);
     }
 }

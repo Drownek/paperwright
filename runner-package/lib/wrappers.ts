@@ -64,7 +64,7 @@ export class GuiItemLocator {
         const { timeout = 5000 } = options;
         const startTime = Date.now();
 
-        while (Date.now() - startTime < timeout) {
+        for (;;) {
             const currentGui = this.gui._getCurrentGuiSnapshot();
             if (currentGui) {
                 const item = currentGui._findItemInternal(this.predicate);
@@ -73,6 +73,7 @@ export class GuiItemLocator {
                     return;
                 }
             }
+            if (Date.now() - startTime >= timeout) break;
             await new Promise(resolve => setTimeout(resolve, 100));
         }
 
