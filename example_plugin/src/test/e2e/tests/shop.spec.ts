@@ -1,4 +1,4 @@
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('shop opens with correct items', async ({ player }) => {
   player.chat('/shop');

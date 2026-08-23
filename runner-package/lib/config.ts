@@ -142,7 +142,7 @@ function readConfigFile(path: string): RunnerConfig {
     if (parsed.version > SUPPORTED_CONFIG_VERSION) {
         throw new Error(
             `Plugwright config at ${path} is version ${parsed.version}, this runner supports up to ` +
-            `${SUPPORTED_CONFIG_VERSION}. Update @drownek/plugwright in your test project.`
+            `${SUPPORTED_CONFIG_VERSION}. Update @plugwright/runner in your test project.`
         );
     }
     if (!parsed.environment || typeof parsed.environment.mode !== 'string') {

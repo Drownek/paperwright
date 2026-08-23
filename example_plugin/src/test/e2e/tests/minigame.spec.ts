@@ -1,4 +1,4 @@
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('join arena game', async ({ player }) => {
   player.chat('/arena join');

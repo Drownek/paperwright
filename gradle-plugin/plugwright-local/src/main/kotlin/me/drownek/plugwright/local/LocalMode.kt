@@ -28,7 +28,7 @@ object LocalMode : PlugwrightMode<LocalEnvironmentSpec> {
         LocalEnvironmentSpec(name, objects)
 
     override fun runnerPackages(spec: LocalEnvironmentSpec): List<RunnerPackageRef> =
-        listOf(RunnerPackageRef("@drownek/plugwright", export = "localEnvironment"))
+        listOf(RunnerPackageRef("@plugwright/runner", export = "localEnvironment"))
 
     override fun validate(spec: LocalEnvironmentSpec, ctx: ValidationContext) {
         if (spec.minecraftVersion.get().isBlank()) {

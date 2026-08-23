@@ -9,7 +9,7 @@ import java.io.Serializable
  * The set of packages depends on the configuration, not only on the mode: an external
  * environment pulls the RCON console package only when the build script declares one.
  *
- * @param name npm package name, e.g. `@drownek/plugwright`
+ * @param name npm package name, e.g. `@plugwright/runner`
  * @param version npm version range; null means "whatever the test project already has"
  * @param export named export of the package holding the factory; null means the default export
  */

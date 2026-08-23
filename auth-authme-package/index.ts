@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { definePlugin, poll } from '@drownek/plugwright';
+import { definePlugin, poll } from '@plugwright/runner';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

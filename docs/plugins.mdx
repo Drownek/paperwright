@@ -59,7 +59,7 @@ Matchers are merged into the shared prototype before the first spec file is impo
 ## Authentication is a hook, not a test
 
 ```ts
-import { definePlugin, poll } from '@drownek/plugwright';
+import { definePlugin, poll } from '@plugwright/runner';
 
 export default definePlugin({
     name: 'authme',
@@ -114,7 +114,7 @@ extendContext(ctx) {
 ```
 
 ```ts
-declare module '@drownek/plugwright' {
+declare module '@plugwright/runner' {
     interface TestContext {
         auth: AuthApi;
     }
@@ -152,7 +152,7 @@ A plugin built against a newer contract than the runner supports fails to load w
 A plugin is an npm package (or a single compiled file) whose default export implements the interface:
 
 ```ts
-import { definePlugin } from '@drownek/plugwright';
+import { definePlugin } from '@plugwright/runner';
 
 export default definePlugin<{ resetCommand?: string }>({
     name: 'staging-reset',
@@ -168,6 +168,6 @@ export default definePlugin<{ resetCommand?: string }>({
 });
 ```
 
-`definePlugin` is an identity function; it exists so TypeScript infers your options type at the definition site. Depend on `@drownek/plugwright` as a peer dependency, ship compiled JavaScript, and point `main` at it.
+`definePlugin` is an identity function; it exists so TypeScript infers your options type at the definition site. Depend on `@plugwright/runner` as a peer dependency, ship compiled JavaScript, and point `main` at it.
 
 `@plugwright/auth-authme` in this repository is a complete, working example: a hook, an options interface, a preflight test, and a README.

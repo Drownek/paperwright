@@ -1,5 +1,5 @@
 {
-  "name": "@drownek/plugwright",
+  "name": "@plugwright/runner",
   "version": "3.0.0-dev.0",
   "description": "End-to-end testing framework for Paper/Spigot Minecraft plugins",
   "type": "module",

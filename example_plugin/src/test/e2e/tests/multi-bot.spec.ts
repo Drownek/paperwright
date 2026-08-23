@@ -2,7 +2,7 @@
  * We test there whether multi-player tests are working as well.
  */
 
-import { expect, test } from '@drownek/plugwright';
+import { expect, test } from '@plugwright/runner';
 
 test('multi-bot teleportation', async ({ player, createPlayer }) => {
     // This executes op server command, and we wait for response from server

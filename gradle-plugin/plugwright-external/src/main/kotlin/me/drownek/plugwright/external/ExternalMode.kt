@@ -20,7 +20,7 @@ object ExternalMode : PlugwrightMode<ExternalEnvironmentSpec> {
         ExternalEnvironmentSpec(name, objects)
 
     override fun runnerPackages(spec: ExternalEnvironmentSpec): List<RunnerPackageRef> = buildList {
-        add(RunnerPackageRef("@drownek/plugwright", export = "externalEnvironment"))
+        add(RunnerPackageRef("@plugwright/runner", export = "externalEnvironment"))
         val needsRcon = spec.consoleSpec?.channels?.any { it is ConsoleChannelSpec.Rcon } == true
         if (needsRcon) {
             add(RunnerPackageRef("@plugwright/console-rcon", export = "rconConsole"))

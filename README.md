@@ -16,9 +16,15 @@ This framework has been renamed from Paperwright to Plugwright. If you are upgra
 
 1. Change `id("io.github.drownek.paperwright")` to `id("io.github.drownek.plugwright")`.
 2. Rename your `paperwright { ... }` configuration block to `plugwright { ... }` and Gradle tasks (e.g. `./gradlew paperwrightTest` to `./gradlew plugwrightTest`).
-3. In your `package.json`, change `@drownek/paperwright` to `@drownek/plugwright` and run `npm install`.
-4. Update your test files: `import { test } from '@drownek/paperwright'` to `import { test } from '@drownek/plugwright'`.
+3. In your `package.json`, change `@drownek/paperwright` to `@plugwright/runner` and run `npm install`.
+4. Update your test files: `import { test } from '@drownek/paperwright'` to `import { test } from '@plugwright/runner'`.
 5. Change your CI to use `drownek/plugwright-action@v1`.
+</details>
+
+<details>
+<summary>⚠️ <strong>Upgrading from Plugwright 2.x? The npm package moved.</strong></summary>
+<br>
+The runner is published as <code>@plugwright/runner</code> from 3.0 onwards; <code>@drownek/plugwright</code> stops receiving releases at 2.x. Change the dependency in your <code>package.json</code>, run <code>npm install</code>, and update the import in your test files. Nothing else moves: the Gradle plugin id stays <code>io.github.drownek.plugwright</code>.
 </details>
 
 ## Features

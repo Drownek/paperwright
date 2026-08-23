@@ -1,4 +1,4 @@
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('navigate through paginated GUI', async ({ player }) => {
     await player.makeOp();

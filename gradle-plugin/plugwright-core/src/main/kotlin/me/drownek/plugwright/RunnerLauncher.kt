@@ -109,7 +109,7 @@ object RunnerLauncher {
     /** Resolves `cli.js` relative to the workspace's `node_modules`, falling back to the
      *  in-repo build for `example_plugin`-style development setups. */
     fun resolveCliJs(workspaceDir: File): File {
-        val defaultCliJs = File(workspaceDir, "node_modules/@drownek/plugwright/dist/cli.js")
+        val defaultCliJs = File(workspaceDir, "node_modules/@plugwright/runner/dist/cli.js")
         return sequenceOf(
             // Canonical path resolves npm symlink bugs on CI
             defaultCliJs.canonicalFile,

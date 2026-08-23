@@ -136,7 +136,7 @@ plugwright {
 The npm package named in `runnerPackages` exports a factory. It takes the `environment.config` object your `serialize` wrote and returns an `Environment`:
 
 ```ts
-import type { Environment, EnvironmentCapabilities, BotConnectionOptions } from '@drownek/plugwright';
+import type { Environment, EnvironmentCapabilities, BotConnectionOptions } from '@plugwright/runner';
 
 export function velocityEnvironment(config: VelocityConfig): Environment {
     return new VelocityEnvironment(config);
