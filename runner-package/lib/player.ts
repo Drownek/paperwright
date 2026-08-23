@@ -1,14 +1,21 @@
 import { Bot } from 'mineflayer';
 import { ItemWrapper, GuiWrapper, createPlayerExtensions, Window, LiveGuiHandle } from './wrappers.js';
 import { ServerWrapper } from './server.js';
-import { activeBots, disconnectBot, createBot } from './bot-utils.js';
+import type { Session } from './session.js';
+import { MessageBuffer } from './session.js';
+import type { BotConnectionOptions } from './environment.js';
+import type { Account } from './account.js';
 import { poll } from './utils.js';
 import { randomUUID } from 'node:crypto';
 import pc from 'picocolors';
 
 export class PlayerWrapper {
     bot: Bot;
-    public readonly messageBuffer: string[] = [];
+    readonly session: Session;
+    /** This player's own received-chat log. Kept per player, not per session, so one bot's
+     *  chat can't satisfy — or pollute — an assertion made against another bot in the same
+     *  test run. */
+    readonly messageBuffer = new MessageBuffer();
 
     get inventory() {
         return this.bot.inventory;
@@ -35,12 +42,14 @@ export class PlayerWrapper {
 
     gui!: (options: { title: string | RegExp; timeout?: number }) => Promise<LiveGuiHandle>;
     private serverWrapper?: ServerWrapper;
-    private _botOptions?: { host: string; port: number; version: string | undefined; auth: 'mojang' | 'microsoft' | 'offline' };
+    private _botOptions?: BotConnectionOptions;
     private _spawnPromise: Promise<void> | null = null;
     private _listenersBot: Bot | null = null;
+    private account?: Account;
 
-    constructor(bot: Bot) {
+    constructor(bot: Bot, session: Session) {
         this.bot = bot;
+        this.session = session;
         this._bindExtensions(bot);
     }
 
@@ -109,6 +118,15 @@ export class PlayerWrapper {
         this._spawnPromise = null;
 
         this._registerPersistentListeners();
+
+        if (this.account) {
+            await this.session.onPlayerCreate?.(this, { account: this.account, env: this.session.env });
+        }
+    }
+
+    /** @internal */
+    _setAccount(account: Account): void {
+        this.account = account;
     }
 
     private _registerPersistentListeners(): void {
@@ -160,7 +178,7 @@ export class PlayerWrapper {
      * Clears the received message history for this player.
      */
     clearMessages(): void {
-        this.messageBuffer.length = 0;
+        this.messageBuffer.clear();
     }
 
     getMessageBufferIndex(): number {
@@ -228,7 +246,7 @@ export class PlayerWrapper {
     }
 
     /** @internal */
-    _setBotOptions(opts: { host: string; port: number; version: string | undefined; auth: 'mojang' | 'microsoft' | 'offline' }): void {
+    _setBotOptions(opts: BotConnectionOptions): void {
         this._botOptions = opts;
     }
 
@@ -245,17 +263,12 @@ export class PlayerWrapper {
         const botUsername = this.username;
         const oldBot = this.bot;
 
-        await disconnectBot(oldBot, botUsername);
+        await this.session.disconnectBot(oldBot, botUsername);
+        this.session.removeBot(oldBot);
 
-        const idx = activeBots.indexOf(oldBot);
-        if (idx !== -1) activeBots.splice(idx, 1);
-
-        const newBot = createBot({
-            host: this._botOptions.host,
-            port: this._botOptions.port,
+        const newBot = this.session.createBot({
+            ...this._botOptions,
             username: botUsername,
-            version: this._botOptions.version,
-            auth: this._botOptions.auth,
         });
 
         this.bot = newBot;
@@ -267,8 +280,7 @@ export class PlayerWrapper {
         try {
             await this.join(options);
         } catch (err) {
-            const idx = activeBots.indexOf(this.bot);
-            if (idx !== -1) activeBots.splice(idx, 1);
+            this.session.removeBot(this.bot);
             throw err;
         }
     }

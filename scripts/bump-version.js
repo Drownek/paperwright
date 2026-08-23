@@ -44,7 +44,7 @@ function bumpVersionFiles(newVersion, isPrerelease) {
 
         // Matches any version after the package name, e.g., "@drownek/plugwright": "^1.x.x"
         replaceRegexInFile(
-            "gradle-plugin/src/main/kotlin/me/drownek/plugwright/PlugwrightPlugin.kt",
+            "gradle-plugin/plugwright-core/src/main/kotlin/me/drownek/plugwright/PlugwrightPlugin.kt",
             /"@drownek\/plugwright": "\^[^"]+"/g,
             `"@drownek/plugwright": "^${newVersion}"`
         );
@@ -106,7 +106,7 @@ async function main() {
         changedSourceFiles.push(
             "README.md",
             "docs/quickstart.mdx",
-            "gradle-plugin/src/main/kotlin/me/drownek/plugwright/PlugwrightPlugin.kt",
+            "gradle-plugin/plugwright-core/src/main/kotlin/me/drownek/plugwright/PlugwrightPlugin.kt",
         );
     }
 
