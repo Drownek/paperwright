@@ -26,7 +26,7 @@ data class NpmCredentials(
 /**
  * A registry npm should fetch from: the default one, or the one a single scope resolves to.
  *
- * @param scope npm scope including the leading `@`, e.g. `@drownek`; null for the default registry
+ * @param scope npm scope including the leading `@`, e.g. `@plugwright`; null for the default registry
  * @param url registry URL, e.g. `https://nexus.corp/repository/npm-private/`
  */
 data class NpmRegistry(
@@ -139,7 +139,7 @@ class NpmCredentialsSpec {
  *         registry("https://nexus.corp/repository/npm-group/") {
  *             authToken(secret.env("NPM_TOKEN"))
  *         }
- *         scope("@drownek", "https://nexus.corp/repository/npm-private/") {
+ *         scope("@plugwright", "https://nexus.corp/repository/npm-private/") {
  *             username(secret.env("NPM_USER"))
  *             password(secret.env("NPM_PASS"))
  *         }
@@ -162,7 +162,7 @@ class NpmSpec {
         registries += NpmRegistry(null, url, NpmCredentialsSpec().apply(action).build())
     }
 
-    /** The registry packages under [scope] (`@drownek`, leading `@` included) come from. */
+    /** The registry packages under [scope] (`@plugwright`, leading `@` included) come from. */
     @JvmOverloads
     fun scope(scope: String, url: String, action: NpmCredentialsSpec.() -> Unit = {}) {
         registries += NpmRegistry(scope, url, NpmCredentialsSpec().apply(action).build())
