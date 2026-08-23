@@ -1,13 +1,10 @@
 {
-  "name": "@drownek/plugwright",
+  "name": "@plugwright/auth-authme",
   "version": "3.0.0-dev.0",
-  "description": "End-to-end testing framework for Paper/Spigot Minecraft plugins",
+  "description": "Reference plugwright authentication plugin for an AuthMe-style login/register flow",
   "type": "module",
-  "main": "dist/runner.js",
-  "types": "dist/runner.d.ts",
-  "bin": {
-    "plugwright": "dist/cli.js"
-  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "rimraf dist && tsc",
     "prepare": "npm run build",
@@ -20,33 +17,27 @@
   ],
   "keywords": [
     "minecraft",
-    "paper",
-    "spigot",
-    "testing",
-    "e2e",
-    "mineflayer"
+    "authme",
+    "plugwright",
+    "testing"
   ],
   "author": "drownek",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/Drownek/plugwright.git",
-    "directory": "runner-package"
+    "directory": "auth-authme-package"
   },
   "homepage": "https://github.com/Drownek/plugwright#readme",
   "bugs": {
     "url": "https://github.com/Drownek/plugwright/issues"
   },
-  "dependencies": {
-    "js-yaml": "^4.1.0",
-    "mineflayer": "^4.0.0",
-    "picocolors": "^1.1.1",
-    "source-map-support": "^0.5.21"
+  "peerDependencies": {
+    "@drownek/plugwright": ">=3.0.0-dev.0"
   },
   "devDependencies": {
-    "@types/js-yaml": "^4.0.9",
+    "@drownek/plugwright": "file:../runner-package",
     "@types/node": "^22.10.5",
-    "@types/source-map-support": "^0.5.10",
     "rimraf": "^6.1.3",
     "typescript": "^5.7.3"
   },

@@ -1,0 +1,133 @@
+---
+title: "Environments"
+description: "Declare the servers your tests run against, and run the same suite on all of them."
+---
+
+An environment is one server your tests can run against. Every environment is backed by a **mode**, which decides where that server comes from:
+
+| Mode | Where the server comes from |
+|---|---|
+| `LocalMode` | Plugwright downloads Paper, patches the configs, starts it, and kills it afterwards |
+| `ExternalMode` | Someone else started it. Plugwright connects and leaves it running |
+
+Both ship with the plugin. A third mode is something you write yourself — see [Writing a mode](/custom-modes).
+
+## Declaring environments
+
+```kotlin
+import me.drownek.plugwright.local.LocalMode
+import me.drownek.plugwright.external.ExternalMode
+
+plugwright {
+    testsDir.set(file("src/test/e2e"))
+    primaryEnvironment.set("local")
+
+    environments {
+        create("local", LocalMode) {
+            minecraftVersion.set("1.21.11")
+            acceptEula.set(true)
+            runDir.set(file("run"))
+        }
+
+        create("staging", ExternalMode) {
+            host.set("mc.example.com")
+            port.set(25565)
+            minecraftVersion.set("1.20.4")
+        }
+    }
+}
+```
+
+The name you pass to `create` becomes the task suffix and the report file name: `local` gives you `plugwrightTestLocal` and `build/reports/plugwright/local.json`.
+
+<Note>
+A build script with no `environments { }` block still works. The flat properties (`minecraftVersion`, `runDir`, `downloadPlugins`, and the rest) describe one implicit `local` environment, exactly as they did before. See [Configuration](/configuration).
+</Note>
+
+## Tasks
+
+```
+plugwrightCompileTests     npm install + tsc, shared by every environment
+plugwrightProvisionLocal   download Paper, patch configs, copy the plugin jar
+plugwrightCleanLocal       wipe the run directory
+plugwrightRunServerLocal   start the server interactively, no tests
+plugwrightPingStaging      check that an external stand answers, no tests
+plugwrightCleanStaging     compensating cleanup on an external stand
+plugwrightTestLocal        run the suite against one environment
+plugwrightTestStaging
+plugwrightTest             the matrix: every environment with includeInMatrix
+```
+
+Which tasks exist depends on the mode. `LocalMode` contributes provisioning, cleaning and a server-run task; `ExternalMode` contributes ping and cleanup, and nothing that touches files.
+
+Tasks for the `primaryEnvironment` also get an unsuffixed alias, so `plugwrightRunServer` still means what it used to. `plugwrightTest` is the exception: it belongs to the matrix.
+
+## The matrix
+
+`plugwrightTest` runs every environment whose `includeInMatrix` is true, one runner process each, and prints a summary:
+
+```
+Environment summaries:
+  local     42 passed,  0 failed,  0 skipped   (1m 12s)
+  staging   31 passed,  2 failed,  9 skipped   (2m 03s)   [allowFailure]
+```
+
+It launches the runner itself rather than depending on the per-environment tasks. A `dependsOn` chain would stop at the first failing environment and hide the results of the rest.
+
+Defaults differ by mode on purpose. `LocalMode` sets `includeInMatrix` to true — a server that only exists during the run belongs in every run. `ExternalMode` sets it to false, because a shared stand should not be pulled into someone's local `plugwrightTest` unasked.
+
+```kotlin
+create("staging", ExternalMode) {
+    // Only in CI, and never fail the build when the stand is flaky
+    includeInMatrix.set(providers.environmentVariable("CI").map { it == "true" }.orElse(false))
+    allowFailure.set(true)
+}
+```
+
+`allowFailure` keeps a failing environment from failing the matrix build. The failures are still reported as failures. Calling `plugwrightTestStaging` directly ignores both flags: an explicit request deserves an honest exit code.
+
+### Narrowing the matrix
+
+```bash
+./gradlew plugwrightTest -Pplugwright.env=local,staging
+```
+
+### Running environments in parallel
+
+```kotlin
+plugwright {
+    matrix {
+        parallel.set(true)
+        maxParallel.set(2)
+    }
+}
+```
+
+Off by default, and worth thinking about before you turn it on. Two local Paper servers means twice the `-Xmx`. Several environments sharing one outbound IP means more join throttling and more ban risk on a public stand. Account pools must not overlap. Output is interleaved, so each environment's log is also written separately to `build/reports/plugwright/<env>.log`.
+
+## Per-environment test selection
+
+`excludeTests` skips tests whose name contains any of the given substrings. It is matched against the test name, not the file name:
+
+```kotlin
+create("staging", ExternalMode) {
+    excludeTests.set(listOf("balance", "kit", "arena"))
+}
+```
+
+Skipped tests appear in the report with the reason. Silence would be worse than a failure here: a test that quietly disappears on one environment looks like coverage you don't have.
+
+Tests can also select environments themselves, either by capability or by name. See [Test Filtering](/test-filtering).
+
+## Secrets
+
+Passwords never belong in the config file Gradle writes into `build/`. Declare them as references instead:
+
+```kotlin
+import me.drownek.plugwright.api.secret
+
+password.set(secret.env("BOT_PASSWORD"))
+password.set(secret.file(file("/etc/plugwright/bot.pass")))
+```
+
+`secret.env` reads an environment variable, `secret.file` the first line of a file. Both are resolved by the runner at run time, so the value stays out of the configuration cache and out of build artifacts. `secret.systemProperty` exists for symmetry but fails at run time — the runner is a separate Node process and cannot see JVM system properties.

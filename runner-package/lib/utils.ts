@@ -1,3 +1,8 @@
+
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 export const sleep = (ms: number, signal?: AbortSignal) => {
     return new Promise<void>((resolve, reject) => {
         if (signal?.aborted) return reject(new Error('Aborted'));
@@ -143,5 +148,25 @@ export async function waitForStable(
         }
         if (Date.now() >= stableDeadline) break;
         await sleep(Math.min(interval, Math.max(0, stableDeadline - Date.now())), signal);
+    }
+}
+
+/**
+ * Imports a package that isn't a dependency of this one — an optional console package, a
+ * third-party mode, a plugin. A plain `import()` resolves from this file, which finds
+ * nothing when the runner itself is a linked checkout rather than an entry under the test
+ * project's `node_modules`; the fallback resolves from the test project instead, which is
+ * where the Gradle plugin installs these packages and is the runner's working directory.
+ */
+export async function importOptionalPackage(name: string): Promise<any> {
+    try {
+        return await import(name);
+    } catch (error) {
+        const fromTestProject = createRequire(pathToFileURL(join(process.cwd(), 'package.json')));
+        try {
+            return await import(pathToFileURL(fromTestProject.resolve(name)).href);
+        } catch {
+            throw error;
+        }
     }
 }

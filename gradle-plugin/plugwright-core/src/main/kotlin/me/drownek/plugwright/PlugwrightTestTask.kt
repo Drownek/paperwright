@@ -59,6 +59,17 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
     @get:Internal
     abstract val journalFile: RegularFileProperty
 
+    /** npm package exporting this environment's factory. Unset for a built-in mode, which the
+     *  runner already carries. */
+    @get:Input
+    @get:Optional
+    abstract val runtimePackage: Property<String>
+
+    /** Named export holding the factory; unset means the package's default export. */
+    @get:Input
+    @get:Optional
+    abstract val runtimeExport: Property<String>
+
     /** Where the generated runner config is written before the CLI is invoked. */
     @get:OutputFile
     abstract val configFile: RegularFileProperty
@@ -111,6 +122,8 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
             junitReportFile = junitReportFile.get().asFile,
             pluginConfigs = pluginConfigs.get(),
             journalFile = journalFile.orNull?.asFile,
+            runtimePackage = runtimePackage.orNull,
+            runtimeExport = runtimeExport.orNull,
         )
         RunnerLauncher.writeConfig(entry)
         logger.lifecycle("Runner config: ${configDestination.absolutePath}")

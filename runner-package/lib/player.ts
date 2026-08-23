@@ -114,14 +114,42 @@ export class PlayerWrapper {
             this._captureSpawnPromise(timeout);
         }
 
-        await this._spawnPromise;
-        this._spawnPromise = null;
-
+        // Listeners go up before the first await: a login wall greets the bot as soon as it
+        // enters the play state, and a prompt that arrives before the message buffer exists
+        // is a prompt no authentication plugin can answer.
         this._registerPersistentListeners();
 
         if (this.account) {
+            // Authentication has to happen while the server still holds the player: AuthMe and
+            // friends keep an unauthenticated bot out of the world entirely, so waiting for the
+            // spawn first would wait for something login is the precondition of.
+            await Promise.race([this._spawnPromise, this._waitForLogin(timeout)]);
             await this.session.onPlayerCreate?.(this, { account: this.account, env: this.session.env });
         }
+
+        await this._spawnPromise;
+        this._spawnPromise = null;
+    }
+
+    /** Resolves once the client is in the play state, where chat works and the server's login
+     *  prompt has been delivered. Never rejects on its own — it is raced against the spawn
+     *  promise, which already fails on a kick, an error or a timeout. */
+    private _waitForLogin(timeout: number): Promise<void> {
+        if (this.bot.entity) return Promise.resolve();
+
+        return new Promise<void>((resolve) => {
+            const timer = setTimeout(() => {
+                this.bot.removeListener('login', onLogin);
+                resolve();
+            }, timeout);
+
+            const onLogin = (): void => {
+                clearTimeout(timer);
+                resolve();
+            };
+
+            this.bot.once('login', onLogin);
+        });
     }
 
     /** @internal */
@@ -169,8 +197,26 @@ export class PlayerWrapper {
         return currentWindow ? new GuiWrapper(this.bot, currentWindow as Window) : null;
     }
 
-    chat(message: string): void {
-        console.log(`${pc.cyan('[Bot]')} ${pc.dim(`Chatting: ${message}`)}`);
+    /**
+     * Sends a chat message as this bot.
+     *
+     * `options.secrets` lists values that must not appear in the line this call logs — a
+     * password, a token, anything the caller already holds and knows is sensitive. Each
+     * occurrence of a listed value is replaced in the *logged* copy of `message`; what goes
+     * to the server is untouched.
+     *
+     * The list is the caller's to supply, and an empty one redacts nothing. Guessing which
+     * argument of an arbitrary command is a password would mean this method knowing every
+     * plugin's command shapes, and a guess that misses fails open — it prints the secret. The
+     * caller is the only one who knows, so the caller says so.
+     */
+    chat(message: string, options: { secrets?: string[] } = {}): void {
+        const { secrets = [] } = options;
+        const logged = secrets.reduce(
+            (text, secret) => (secret ? text.split(secret).join('[REDACTED]') : text),
+            message,
+        );
+        console.log(`${pc.cyan('[Bot]')} ${pc.dim(`Chatting: ${logged}`)}`);
         this.bot.chat(message);
     }
 
@@ -205,7 +251,19 @@ export class PlayerWrapper {
 
     async makeOp(): Promise<void> {
         this.requireServer();
-        this.serverWrapper!.execute(`minecraft:op ${this.username}`);
+        const command = `minecraft:op ${this.username}`;
+
+        // A console that answers (RCON) says whether the command worked; the confirmation is
+        // never broadcast to the player, so there is nothing to wait for in the chat buffer.
+        if (this.session.console?.output === 'responses') {
+            const response = await this.serverWrapper!.executeAndWait(command);
+            // "Made X a server operator" on success, "Nothing changed. The player already is
+            // an operator" when it was already granted — both mean the player is op now.
+            if (/operator/i.test(response)) return;
+            throw new Error(`Player ${this.username} was not opped: ${response.trim() || 'no response from the console'}`);
+        }
+
+        this.serverWrapper!.execute(command);
 
         await poll(
             () => this.messageBuffer.find(m => m.includes(`Made ${this.username} a server operator`)),
@@ -308,6 +366,15 @@ export class PlayerWrapper {
 
     private async executeAndSync(cmd: string): Promise<void> {
         this.requireServer();
+
+        // A console that answers has already finished the command by the time it replies. The
+        // marker below exists for the stdio console, where output and command completion are
+        // two unrelated streams.
+        if (this.session.console?.output === 'responses') {
+            await this.serverWrapper!.executeAndWait(cmd);
+            return;
+        }
+
         const syncId = `sync_${randomUUID().split('-')[0]}`;
         this.serverWrapper!.execute(cmd);
         this.serverWrapper!.execute(`minecraft:say ${syncId}`);

@@ -14,6 +14,8 @@ The **[`example_plugin`](https://github.com/Drownek/plugwright/tree/main/example
 - **Events**: Testing actions triggered by player joins or scheduled server tasks.
 - **Teleportation**: Warps, commands, and movement.
 
+Its `build.gradle.kts` also declares two environments for the same suite. `local` downloads Paper, installs AuthMe next to the plugin under test, writes an AuthMe config a bot can actually get through, and logs every bot in with `@plugwright/auth-authme`. `stand` connects to a server started by hand from the same run directory, leasing accounts from a pool, reaching the console over RCON, and resetting op and inventory between tests through a small local plugin. Reading the two side by side is the shortest way to see what changes when Plugwright stops owning the server.
+
 <Card title="View the Example Plugin on GitHub" icon="github" href="https://github.com/Drownek/plugwright/tree/main/example_plugin">
   Explore the Java source code and TypeScript test specs to see how to implement robust E2E tests for your own plugins.
 </Card>

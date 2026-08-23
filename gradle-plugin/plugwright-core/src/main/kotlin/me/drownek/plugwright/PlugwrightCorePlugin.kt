@@ -53,6 +53,8 @@ class PlugwrightCorePlugin : Plugin<Project> {
             }
 
             testsDir.set(extension.testsDir)
+            // Filled in once every environment has been wired; empty until then.
+            runnerPackages.convention(emptyList())
             nodeVersion.set(extension.nodeVersion)
             downloadNode.set(extension.downloadNode)
             nodeInstallDir.set(defaultNodeInstallDir)
@@ -150,6 +152,16 @@ class PlugwrightCorePlugin : Plugin<Project> {
                 extension.testsDir.map { it.asFile }, extension, defaultNodeInstallDir
             )
             val journalFilePath = project.layout.buildDirectory.file("plugwright/$envName-journal.jsonl").get().asFile
+            val modePackages = mode.runnerPackages(entry.spec)
+
+            // The package a mode names an export in is the one holding its environment factory.
+            // Only a third-party mode needs it written into the config; `local` and `external`
+            // are compiled into the runner, which resolves them by mode id.
+            val runtimeRef = if (mode.id == "local" || mode.id == "external") {
+                null
+            } else {
+                modePackages.firstOrNull { it.export != null }
+            }
 
             val testTask = ctx.registerWithoutAlias("Test", PlugwrightTestTask::class.java) {
                 doFirst {
@@ -167,9 +179,18 @@ class PlugwrightCorePlugin : Plugin<Project> {
                 nodeVersion.set(extension.nodeVersion)
                 downloadNode.set(extension.downloadNode)
                 nodeInstallDir.set(defaultNodeInstallDir)
+                runtimeRef?.let { ref ->
+                    runtimePackage.set(ref.name)
+                    ref.export?.let { runtimeExport.set(it) }
+                }
 
                 if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
                 if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
+            }
+
+            // Merged across environments so the whole matrix is covered by one install.
+            modePackages.forEach { ref ->
+                runnerPackageSpecs += if (ref.version != null) "${ref.name}@${ref.version}" else ref.name
             }
 
             val validation = ValidationContextImpl(envName, project.logger)
@@ -182,6 +203,13 @@ class PlugwrightCorePlugin : Plugin<Project> {
                 ?: project.provider { ConfigNodeBuilder().apply { mode.serialize(entry.spec, this) }.build() }
             val pluginConfigsProvider = ctx.pluginConfigsProvider
                 ?: project.provider { emptyList() }
+
+            // A plugin declared by npm name is installed alongside the environment's own
+            // runner packages; a plugin given as a path is already in the project.
+            pluginConfigsProvider.get()
+                .map { it.specifier }
+                .filter { isNpmPackageName(it) }
+                .forEach { runnerPackageSpecs += it }
 
             testTask.configure {
                 ctx.prepareTaskRef?.let { dependsOn(it) }
@@ -204,10 +232,14 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     environmentConfig = environmentConfigProvider,
                     pluginConfigs = pluginConfigsProvider,
                     journalFile = journalFilePath,
+                    runtimePackage = runtimeRef?.name,
+                    runtimeExport = runtimeRef?.export,
                 )
                 ctx.prepareTaskRef?.let { matrixPrepareTasks += it }
             }
         }
+
+        plugwrightCompileTests.configure { runnerPackages.set(runnerPackageSpecs.toList()) }
 
         if (validationProblems.isNotEmpty()) {
             throw GradleException("plugwright configuration problems:\n" + validationProblems.joinToString("\n") { "  $it" })
@@ -228,6 +260,14 @@ class PlugwrightCorePlugin : Plugin<Project> {
             if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
             if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
         }
+    }
+
+    /** Whether a plugin specifier names an npm package rather than a file in the project.
+     *  Paths are what `plugins { local(file(...)) }` produces; everything else is installable. */
+    private fun isNpmPackageName(specifier: String): Boolean {
+        if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("\\")) return false
+        if (specifier.length > 1 && specifier[1] == ':') return false
+        return true
     }
 
     /** The jar of the plugin under test, from `shadowJar` / `reobfJar` / `jar`. Absent when

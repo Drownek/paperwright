@@ -91,6 +91,8 @@ object LocalMode : PlugwrightMode<LocalEnvironmentSpec> {
 
         ctx.prepareTask(provision)
 
+        ctx.pluginConfigs(project.provider { spec.pluginsSpec.refs() })
+
         ctx.environmentConfig(project.provider {
             buildConfigNode(spec, resolveJavaPath(javaLauncherProvider))
         })

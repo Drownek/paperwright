@@ -10,5 +10,5 @@
     "sourceMap": true,
     "inlineSources": true
   },
-  "include": ["*.spec.ts"]
+  "include": ["*.spec.ts", "plugins/*.ts"]
 }

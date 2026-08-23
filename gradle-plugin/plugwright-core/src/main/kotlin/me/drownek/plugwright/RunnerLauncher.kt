@@ -29,6 +29,10 @@ object RunnerLauncher {
         val jsonReportFile: File? = null,
         val junitReportFile: File? = null,
         val pluginConfigs: List<PluginRef> = emptyList(),
+        /** npm package exporting this environment's factory; null for a built-in mode. */
+        val runtimePackage: String? = null,
+        /** Named export holding the factory; null means the package's default export. */
+        val runtimeExport: String? = null,
         /** Crash-recovery journal path for `Session.journal`; null disables on-disk persistence. */
         val journalFile: File? = null,
     )
@@ -39,6 +43,17 @@ object RunnerLauncher {
             obj("environment") {
                 put("name", entry.environmentName)
                 put("mode", entry.modeId)
+                // Where the runner loads the environment implementation from. The built-in
+                // modes are compiled into the runner and ignore it; a third-party mode is
+                // only reachable through this reference.
+                if (entry.runtimePackage != null) {
+                    obj("runtime") {
+                        put("package", entry.runtimePackage)
+                        putIfPresent("export", entry.runtimeExport)
+                    }
+                } else {
+                    putNull("runtime")
+                }
                 put("config", entry.environmentConfig)
             }
             obj("tests") {

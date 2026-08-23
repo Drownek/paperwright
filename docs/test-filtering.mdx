@@ -1,43 +1,88 @@
 ---
 title: "Test Filtering"
-description: "Run specific tests using `-PtestFiles` and `-PtestNames`."
+description: "Pick tests by file, by name, by environment, or by what the environment can do."
 ---
 
-### Syntax Rules
-*   **Matching:** Case-sensitive substring matching.
-*   **Multiple Patterns:** Comma-separated (no spaces).
-*   **Extensions:** No need to include `.spec.js` or `.spec.ts`.
+## From the command line
 
-## Filter by File
-Run specific test files.
+Matching is case-sensitive substring matching. Multiple patterns are comma-separated with no spaces, and file patterns don't need the `.spec.js` / `.spec.ts` suffix.
 
 ```bash
-# Run basic.spec.js
+# One file, or several
 ./gradlew plugwrightTest -PtestFiles="basic"
-
-# Run files matching "basic" OR "commands"
 ./gradlew plugwrightTest -PtestFiles="basic,commands"
-```
 
-## Filter by Test Name
-Run specific test cases.
-
-```bash
-# Run tests containing "should connect"
+# By test name
 ./gradlew plugwrightTest -PtestNames="should connect"
 
-# Run tests matching "teleport" OR "spawn"
-./gradlew plugwrightTest -PtestNames="teleport,spawn"
-```
-
-## Combine Filters
-Run tests that match **both** the file and the name criteria.
-
-```bash
-# Run "purchase" tests, but only inside "shop" files
+# Both: "purchase" tests inside "shop" files
 ./gradlew plugwrightTest -PtestFiles="shop" -PtestNames="purchase"
+
+# Narrow the matrix to specific environments
+./gradlew plugwrightTest -Pplugwright.env=local,staging
 ```
 
-<Tip>
-**Note:** Running `./gradlew plugwrightTest` without arguments runs all tests.
-</Tip>
+Running `./gradlew plugwrightTest` with no arguments runs everything, on every environment in the matrix.
+
+## From the build script
+
+`excludeTests` skips tests whose name contains one of the substrings, for one environment only:
+
+```kotlin
+create("staging", ExternalMode) {
+    excludeTests.set(listOf("balance", "kit", "arena"))
+}
+```
+
+## From the test itself
+
+Two filters, meant for different problems.
+
+**By capability** — for a test that needs something the environment might not have. This travels with the test and doesn't care what the environments are called:
+
+```ts
+test('give command hands over the item', { requires: ['console', 'op'] }, async ({ player }) => {
+    await player.giveItem('diamond', 1);
+});
+```
+
+Capability keys come from the environment's own report, after it has connected:
+
+| Key | Values | Meaning |
+|---|---|---|
+| `console` | boolean | Commands can be run at all |
+| `consoleOutput` | `full` / `responses` / `none` | Whole server log, only command answers, or nothing |
+| `op` | boolean | The environment can grant operator status |
+| `freshState` | boolean | Each test gets a clean world and a clean player |
+| `arbitraryUsernames` | boolean | Bots may pick their own names |
+| `lifecycle` | boolean | The server can be restarted or stopped |
+| `cleanupStrategy` | `wipe` / `compensating` / `none` | How cleanup happens after the run |
+
+A bare key is satisfied by anything other than `false`, `'none'` or an absent value. To demand one specific value, use `key:value`:
+
+```ts
+test('command is logged', { requires: ['consoleOutput:full'] }, async ({ server }) => {
+    server.execute('say hello');
+    await expect(server).toHaveReceivedMessage('hello');
+});
+```
+
+That form exists because `requires: ['console']` is satisfied by an RCON console that answers its own commands, while reading the server log needs a console that streams all of it. Without the distinction you get tests that neither skip nor work.
+
+**By environment name** — for when the difference isn't a capability but what's installed on that particular server:
+
+```ts
+test('the /debug dev command', { environments: ['local'] }, async ({ player }) => {
+    player.chat('/debug');
+});
+```
+
+## Skips are reported
+
+Every skipped test lands in the report with its reason:
+
+```
+  Test: server logs command execution - SKIPPED (requires capability [consoleOutput:full], unavailable on "staging")
+```
+
+The reason is in the JSON report and in the `<skipped message="…"/>` element of the JUnit XML too. See [Reports](/reports).

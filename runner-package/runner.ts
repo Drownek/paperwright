@@ -13,6 +13,7 @@ import { externalEnvironment } from './lib/environments/external.js';
 import { PlayerWrapper } from './lib/player.js';
 import { printTestSummary, writeJsonReport, writeJUnitReport } from './lib/reporter.js';
 import { loadRunnerConfig } from './lib/config.js';
+import { importOptionalPackage } from './lib/utils.js';
 import type { Environment } from './lib/environment.js';
 import type { EnvironmentConfig, LocalEnvironmentConfig, RunnerConfig } from './lib/config.js';
 import type { ExternalEnvironmentConfig } from './lib/environments/external.js';
@@ -61,7 +62,7 @@ async function resolveEnvironment(cfg: EnvironmentConfig): Promise<Environment> 
     if (cfg.runtime) {
         let mod: any;
         try {
-            mod = await import(cfg.runtime.package);
+            mod = await importOptionalPackage(cfg.runtime.package);
         } catch (error) {
             throw new Error(
                 `Environment "${cfg.name}" needs package "${cfg.runtime.package}", which failed to load: ` +
@@ -79,10 +80,18 @@ async function resolveEnvironment(cfg: EnvironmentConfig): Promise<Environment> 
 }
 
 /** Capability keys from `testCase.requires` that `env` does not actually satisfy. A
- *  value of `false`, `'none'`, or an absent key all count as unmet. */
+ *  value of `false`, `'none'`, or an absent key all count as unmet.
+ *
+ *  `'key:value'` demands one specific value instead — `'consoleOutput:full'` for a test that
+ *  reads the server log, which a console answering only its own commands cannot provide even
+ *  though it satisfies plain `'console'`. */
 function missingCapabilities(env: Environment, required: string[]): string[] {
     const capabilities = env.capabilities as unknown as Record<string, unknown>;
     return required.filter(key => {
+        const separator = key.indexOf(':');
+        if (separator !== -1) {
+            return String(capabilities[key.slice(0, separator)]) !== key.slice(separator + 1);
+        }
         const value = capabilities[key];
         return value === false || value === 'none' || value === undefined;
     });

@@ -1,0 +1,84 @@
+---
+title: "Reports"
+description: "JSON and JUnit XML output, per environment."
+---
+
+Every run writes two report files, whether it was started by `plugwrightTest<Env>` or by the matrix:
+
+```
+build/reports/plugwright/<env>.json        machine-readable, what the matrix aggregates
+build/reports/plugwright/junit/<env>.xml   JUnit XML for CI
+build/reports/plugwright/<env>.log         per-environment output, matrix runs only
+```
+
+## JSON
+
+```json
+{
+  "environment": "staging",
+  "summary": { "total": 47, "passed": 33, "failed": 0, "skipped": 14, "durationMs": 152340 },
+  "tests": [
+    {
+      "file": "…/dist/commands.spec.js",
+      "name": "help command shows available commands",
+      "status": "pass",
+      "durationMs": 63,
+      "error": null,
+      "skipReason": null,
+      "plugin": null
+    },
+    {
+      "file": "…/dist/simple-ts.spec.js",
+      "name": "server logs command execution",
+      "status": "skip",
+      "durationMs": 0,
+      "error": null,
+      "skipReason": "requires capability [consoleOutput:full], unavailable on \"staging\"",
+      "plugin": null
+    }
+  ]
+}
+```
+
+`status` is `pass`, `fail` or `skip`. `plugin` names the plugin a test came from when it was inherited rather than found in your test directory.
+
+Every skip carries its reason: excluded by name, wrong environment, or a capability the environment doesn't have. A skipped test that doesn't say why is worse than a failing one, because it reads as coverage.
+
+## JUnit XML
+
+```xml
+<testsuite name="plugwright.staging" tests="47" failures="0" skipped="14" time="152.340">
+  <testcase classname="…/dist/commands.spec.js" name="help command shows available commands" time="0.063"/>
+  <testcase classname="…/dist/simple-ts.spec.js" name="server logs command execution" time="0.000">
+    <skipped message="requires capability [consoleOutput:full], unavailable on &quot;staging&quot;"/>
+  </testcase>
+</testsuite>
+```
+
+The suite name is `plugwright.<env>`, so a matrix run produces one suite per environment and CI keeps them apart. `classname` is the spec file, `name` is the full test name including its `describe` chain. Failures carry the message as the attribute and the stack as the body.
+
+Most CI systems pick these up with a glob:
+
+```yaml
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: plugwright-reports
+    path: build/reports/plugwright/
+```
+
+## Matrix summary
+
+```
+Environment summaries:
+  local     47 passed,  0 failed,  0 skipped   (4m 09s)
+  staging   33 passed,  2 failed, 14 skipped   (2m 35s)   [allowFailure]
+```
+
+An environment that produced no report at all gets an `ERROR:` line instead of counts:
+
+```
+  staging   ERROR: Command '…cli.js --config …' failed with exit code: 1   [allowFailure]
+```
+
+Failed tests and an unreachable server are different problems, and the summary keeps them apart so you know whether to read the diff or fix the stand.

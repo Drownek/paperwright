@@ -72,12 +72,25 @@ export class RunnerMatchers<T = unknown> extends Matchers<T> {
             return strict ? msg === expectedMessage : msg.includes(expectedMessage);
         };
 
+        const session = (this.actual as PlayerWrapper | ServerWrapper).session;
+
+        // Reading the server log needs a console that streams everything. A console that only
+        // answers the commands it is given (RCON) leaves the buffer empty, and the assertion
+        // would fail after a full timeout with nothing explaining why.
+        if (!(this.actual instanceof PlayerWrapper) && session.env.capabilities.consoleOutput !== 'full') {
+            throw new Error(
+                `Cannot read the server log on environment "${session.env.id}": its console output level is ` +
+                `"${session.env.capabilities.consoleOutput}". Mark the test with requires: ['consoleOutput:full'] ` +
+                'to have it skipped there instead.'
+            );
+        }
+
         // A player's messages are its own (see `PlayerWrapper.messageBuffer`) so one bot's chat
         // never satisfies an assertion made against another; the server log has no such split,
         // it's one console shared by the whole session.
         const buffer = this.actual instanceof PlayerWrapper
             ? this.actual.messageBuffer
-            : (this.actual as ServerWrapper).session.consoleLog;
+            : session.consoleLog;
         const view = (): string[] => buffer.slice(since);
 
         await this.pollAssertion(

@@ -3,6 +3,34 @@ title: "Configuration"
 description: "Complete reference for Gradle plugin configuration options."
 ---
 
+There are two ways to write this block, and they describe the same thing.
+
+The short one is everything below: flat properties on `plugwright { }`, describing a single local Paper server. Nothing about it has changed, and builds that use it keep working.
+
+The long one names its servers explicitly, which is what you want as soon as there is more than one:
+
+```kotlin
+import me.drownek.plugwright.local.LocalMode
+
+plugwright {
+    testsDir.set(file("src/test/e2e"))
+
+    environments {
+        create("local", LocalMode) {
+            minecraftVersion.set("1.21.11")
+            runDir.set(file("run"))
+            acceptEula.set(true)
+        }
+    }
+}
+```
+
+Inside `create("local", LocalMode) { }` you get the same properties documented on this page, plus `includeInMatrix`, `allowFailure`, `excludeTests` and `plugins { }`. Adding a second environment — a staging server, a proxy, anything — is a second `create` call. See [Environments](/environments) and [External Servers](/external-servers).
+
+<Note>
+Without an `environments { }` block, the flat properties below describe one implicit environment named `local`. They are deprecated and will be removed in 4.0.
+</Note>
+
 ## Example Configuration
 
 In your `build.gradle.kts`:
@@ -165,6 +193,59 @@ downloadNode.set(true) // no local Node.js required - download it automatically
 
 ```kotlin
 nodeVersion.set("22.14.0")
+```
+
+## Multi-environment options
+
+These live on `plugwright { }` itself, next to `testsDir`.
+
+<ParamField path="primaryEnvironment" type="Property<String>">
+  Environment the unsuffixed task aliases point at. `plugwrightRunServer` means `plugwrightRunServerLocal` when this is `"local"`. Default is `"local"`. It does not mean "the only environment that runs" — the matrix runs all of them.
+</ParamField>
+
+```kotlin
+primaryEnvironment.set("local")
+```
+
+<ParamField path="matrix" type="Action<MatrixSpec>">
+  Settings for the `plugwrightTest` matrix run. `parallel` runs environments concurrently (off by default), `maxParallel` caps how many at once (default `2`).
+</ParamField>
+
+```kotlin
+matrix {
+    parallel.set(true)
+    maxParallel.set(2)
+}
+```
+
+Per-environment, inside `create(...) { }`:
+
+<ParamField path="includeInMatrix" type="Property<Boolean>">
+  Whether `plugwrightTest` includes this environment. `true` for `LocalMode`, `false` for `ExternalMode`. Ignored when the per-environment task is called directly.
+</ParamField>
+
+<ParamField path="allowFailure" type="Property<Boolean>">
+  Whether failures here fail the matrix build. Failures are still reported as failures. Default `false`, and ignored when the per-environment task is called directly.
+</ParamField>
+
+<ParamField path="excludeTests" type="ListProperty<String>">
+  Test name substrings to skip in this environment. Skipped tests appear in the report with the reason.
+</ParamField>
+
+<ParamField path="port" type="Property<Int>">
+  Port the local server binds and bots connect on. Default `25565`.
+</ParamField>
+
+<ParamField path="plugins" type="Action<PluginsSpec>">
+  Runner plugins this environment loads: `npm("@scope/name") { options["key"] = "value" }` for a published package, `local(file("…"))` for a compiled file in your test project. See [Runner Plugins](/plugins).
+</ParamField>
+
+```kotlin
+plugins {
+    npm("@plugwright/auth-authme") {
+        options["loginCommand"] = "/login"
+    }
+}
 ```
 
 ## Environment Variables
