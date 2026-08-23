@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write      # for creating GitHub releases
-      id-token: write      # required for OIDC trusted publishing
+      id-token: write      # signs the provenance attestation
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,6 +35,12 @@ jobs:
       # installed together rather than one directory at a time. Each package builds itself
       # from `prepublishOnly`, and the script publishes all three.
       - name: Publish NPM packages
+        env:
+          # A trusted publisher is configured per package, and no name under @plugwright
+          # exists yet, so there is nothing for OIDC to authenticate against on the first
+          # release. A granular token scoped to the org carries it; once all three names
+          # exist, `npm trust` takes over and this block comes out.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm run install:packages
           npm run publish:packages -- --provenance

@@ -34,8 +34,11 @@ cd gradle-plugin
 
 `publish:packages` with nothing configured publishes all three npm packages to npmjs.com. It
 uses whatever credentials npm already has, so an `npm login` session or an `NPM_TOKEN` is
-enough; in CI it is the OIDC token the job was issued, which is also what makes
-`--provenance` work.
+enough. In CI it is an `NPM_TOKEN` secret rather than the job's OIDC token: a trusted
+publisher is configured per package, and the `@plugwright` names have never been published,
+so there is nothing to authenticate against until the first release has gone out. Provenance
+is signed from the OIDC token either way, so `--provenance` works with both. Once all three
+packages exist, `npm trust github <package> --file release.yml` replaces the secret.
 
 `publishToPublicRepository` is the Gradle Plugin Portal, and reads `GRADLE_PUBLISH_KEY` and
 `GRADLE_PUBLISH_SECRET` the way the `plugin-publish` plugin always has.
