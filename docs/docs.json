@@ -20,6 +20,7 @@
         "pages": [
           "introduction",
           "quickstart",
+          "project-layout",
           "configuration"
         ]
       },

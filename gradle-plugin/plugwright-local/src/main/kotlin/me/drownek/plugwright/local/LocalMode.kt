@@ -3,6 +3,7 @@ package me.drownek.plugwright.local
 import me.drownek.plugwright.api.ConfigNode
 import me.drownek.plugwright.api.ConfigNodeBuilder
 import me.drownek.plugwright.api.LegacyEnvironmentProperties
+import me.drownek.plugwright.api.PlugwrightLayout
 import me.drownek.plugwright.api.PlugwrightMode
 import me.drownek.plugwright.api.RunnerPackageRef
 import me.drownek.plugwright.api.TaskRegistrationContext
@@ -35,6 +36,14 @@ object LocalMode : PlugwrightMode<LocalEnvironmentSpec> {
         }
         if (!spec.runDir.isPresent) {
             ctx.error("runDir must be set")
+        }
+    }
+
+    /** The server lives under the workspace, in this environment's own generated directory,
+     *  unless the build script named a directory itself. */
+    override fun applyLayoutDefaults(spec: LocalEnvironmentSpec, layout: PlugwrightLayout) {
+        if (!spec.runDir.isPresent) {
+            spec.runDir.set(File(layout.generatedDir(spec.name), "run"))
         }
     }
 

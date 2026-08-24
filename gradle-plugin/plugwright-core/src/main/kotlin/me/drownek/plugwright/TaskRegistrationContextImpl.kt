@@ -2,6 +2,7 @@ package me.drownek.plugwright
 
 import me.drownek.plugwright.api.ConfigNode
 import me.drownek.plugwright.api.PluginRef
+import me.drownek.plugwright.api.PlugwrightLayout
 import me.drownek.plugwright.api.TaskRegistrationContext
 import org.gradle.api.Project
 import org.gradle.api.Task
@@ -20,6 +21,7 @@ internal class TaskRegistrationContextImpl(
     private val isPrimary: Boolean,
     override val projectPluginJar: Provider<File>,
     override val testsDir: Provider<File>,
+    override val layout: PlugwrightLayout,
     private val extension: PlugwrightExtension,
     private val nodeInstallDir: File
 ) : TaskRegistrationContext {

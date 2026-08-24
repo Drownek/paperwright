@@ -10,7 +10,6 @@
   },
   "scripts": {
     "build": "rimraf dist && tsc",
-    "prepare": "npm run build",
     "prepublishOnly": "npm run build",
     "watch": "tsc --watch",
     "typecheck": "tsc --noEmit"

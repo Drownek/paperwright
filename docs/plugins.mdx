@@ -13,14 +13,14 @@ create("staging", ExternalMode) {
         npm("@plugwright/auth-authme") {
             options["loginCommand"] = "/log"
         }
-        local(file("src/test/e2e/dist/plugins/staging.js")) {
+        local("staging") {
             inheritTests = false
         }
     }
 }
 ```
 
-`npm(...)` names a published package, installed by `plugwrightCompileTests` along with the rest of the environment's packages. `local(...)` points at a compiled file in your own test project. Options are plain strings — anything secret belongs in `accounts { }`, where it stays a secret reference.
+`npm(...)` names a published package, installed by `plugwrightCompileTests` along with the rest of the environment's packages. `local(...)` names a plugin of your own: `local("staging")` is `plugins/staging.ts` in the test workspace, compiled to `dist/plugins/staging.js` by the same `tsc` run as your specs. For a plugin that lives outside the workspace there is still `local(file("..."))`. Options are plain strings — anything secret belongs in `accounts { }`, where it stays a secret reference.
 
 `LocalMode` takes the same block. A local server running an authentication plugin needs the login hook exactly as much as a remote one does.
 
@@ -82,7 +82,7 @@ tests: [
 
 `preflight` tests run before any user spec and abort the run when they fail — there is no point testing a shop when nobody can log in. `suite` tests run alongside your own and are tagged with the plugin's name in the report.
 
-Spec discovery skips `node_modules`, so this is the only way a packaged test ever runs. Per-plugin, `inheritTests = false` loads the hooks and matchers without the tests.
+Spec discovery only looks at your own compiled `tests` directory, so this is the only way a packaged test ever runs. Per-plugin, `inheritTests = false` loads the hooks and matchers without the tests.
 
 ## Fixtures
 

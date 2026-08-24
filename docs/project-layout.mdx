@@ -1,0 +1,82 @@
+---
+title: "Project Layout"
+description: "Where the specs, the plugins and the generated files live."
+---
+
+Everything plugwright needs sits under one directory — `src/test/e2e` unless you point `testsDir` somewhere else. It is an npm project, so `package.json` and `node_modules` are there too:
+
+```
+src/test/e2e/
+  package.json          the npm project the runner is installed into
+  tsconfig.json
+  .gitignore            node_modules, dist, generated
+  tests/                your specs
+    shop.spec.ts
+  plugins/              runner plugins you wrote yourself
+    stand-reset.ts
+  dist/                 compiled output, mirroring tests/ and plugins/
+  generated/            what the environments write while they run
+    local/run/          the Paper server the local environment starts
+  node_modules/
+```
+
+Three of those directories are disposable: `node_modules`, `dist` and `generated`. Delete any of them and the next `plugwrightTest` recreates it. `plugwrightInit` writes a `.gitignore` covering all three; if you already have one, it appends the lines it needs and leaves the rest alone.
+
+## tests
+
+`plugwrightCompileTests` compiles `tests/**/*.ts` into `dist/tests`, keeping subdirectories, and the runner scans the result for `.spec.js`. Group specs into folders however you like — `tests/economy/shop.spec.ts` is fine.
+
+A workspace of plain JavaScript needs no compile step. Without a `tsconfig.json` the runner reads `tests/` directly.
+
+## plugins
+
+Runner plugins — hooks, fixtures, matchers, inherited tests — go in `plugins/`, one file each, and compile into `dist/plugins`. A plugin is loaded by name:
+
+```kotlin
+plugins {
+    local("stand-reset")   // plugins/stand-reset.ts
+}
+```
+
+`local(file(...))` still takes a path, for a plugin that lives somewhere else entirely. See [Runner Plugins](/plugins).
+
+## generated
+
+Each environment gets its own directory under `generated/`, named after it. The local environment puts its Paper server in `generated/<environment>/run`: the jar, the worlds, the logs, the plugins it downloaded. Two local environments in one matrix therefore never share a server directory.
+
+You can still choose the directory yourself, and an explicit value always wins:
+
+```kotlin
+environments {
+    create("local", LocalMode) {
+        runDir.set(file("/mnt/fast-disk/paper"))
+    }
+}
+```
+
+The `stand` in the [example project](https://github.com/Drownek/plugwright/tree/master/example_plugin) shows why the default is convenient: an external environment can point at the very server the local one left behind, because there is only one place it could be.
+
+## Moving the whole thing
+
+`testsDir` is the root of all of this:
+
+```kotlin
+plugwright {
+    testsDir.set(file("e2e"))
+}
+```
+
+Then the specs are in `e2e/tests`, the server in `e2e/generated/local/run`, and so on.
+
+## Migrating from the old layout
+
+Before this layout, specs sat directly in `testsDir` and the local server went to a `run/` directory next to `build.gradle.kts`. The move is mostly automatic — the first `plugwrightCompileTests` after upgrading moves every spec it finds into `tests/`, subdirectories intact, and rewrites `tsconfig.json` so `include` points at the new place. It logs both.
+
+Four things are worth checking by hand afterwards:
+
+1. **Your `.gitignore`.** `run/` no longer needs an entry. `generated/` inside the workspace does — run `plugwrightInit` again to have the lines appended, or add them yourself.
+2. **`runDir`.** A build script that sets it keeps that exact directory. Drop the line to get `generated/<environment>/run` instead, and move the server there if you want to keep the downloaded jar and the worlds.
+3. **Local plugins.** `local(file("src/test/e2e/dist/plugins/x.js"))` becomes `local("x")` once the source is in `plugins/`.
+4. **A `tsconfig.json` with comments.** JSON with comments is legal in a `tsconfig` and unparseable as JSON, so plugwright leaves such a file untouched and says so. Point `include` at `tests/**/*.ts` and `plugins/**/*.ts` yourself.
+
+If you would rather do the move by hand, `git mv` the specs into `tests/` before upgrading. The migration only runs while there is no `tests/` directory at all.

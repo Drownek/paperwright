@@ -29,7 +29,8 @@ plugwright {
         create("local", LocalMode) {
             minecraftVersion.set("1.21.11")
             acceptEula.set(true)
-            runDir.set(file("run"))
+            // No runDir: the server goes to src/test/e2e/generated/local/run, which is where
+            // the layout puts what an environment generates.
 
             // start.sh is the hand-written launcher the "stand" environment connects to; it
             // lives in the run directory and has to survive the clean that precedes each run.
@@ -90,7 +91,8 @@ plugwright {
         }
 
         // The same tests against a server plugwright does not own: started by hand from
-        // ./run, still up when the tests connect, still up after they finish. Out of the
+        // src/test/e2e/generated/local/run, still up when the tests connect, still up after
+        // they finish (the local environment left it there). Out of the
         // default matrix because it needs that server to be running.
         create("stand", ExternalMode) {
             host.set("localhost")
@@ -120,8 +122,8 @@ plugwright {
 
             plugins {
                 npm("@plugwright/auth-authme")
-                // Compiled output of src/test/e2e/plugins/stand-reset.ts.
-                local(file("src/test/e2e/dist/plugins/stand-reset.js"))
+                // src/test/e2e/plugins/stand-reset.ts, by the name of the file.
+                local("stand-reset")
             }
 
             // Matched against test names. What is left out here is what the stand cannot give

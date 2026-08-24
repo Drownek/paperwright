@@ -1,6 +1,8 @@
 package me.drownek.plugwright
 
 import me.drownek.plugwright.api.ConfigNodeBuilder
+import me.drownek.plugwright.api.PluginRef
+import me.drownek.plugwright.api.PlugwrightLayout
 import org.gradle.api.GradleException
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.Plugin
@@ -132,6 +134,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
             )
         }
 
+        val layout = PlugwrightLayout.of(extension.testsDir.get().asFile)
         val projectPluginJarProvider = resolveProjectPluginJar(project, extension)
         val validationProblems = mutableListOf<String>()
         val reportsDir = project.layout.buildDirectory.dir("reports/plugwright")
@@ -147,9 +150,12 @@ class PlugwrightCorePlugin : Plugin<Project> {
         extension.environments.all.forEach { entry ->
             val envName = entry.spec.name
             val mode = entry.mode.erased()
+            // Before validation and registerTasks: a mode fills in what it can derive from
+            // the layout here, and both of those already expect a complete spec.
+            mode.applyLayoutDefaults(entry.spec, layout)
             val ctx = TaskRegistrationContextImpl(
                 project, envName, envName == primaryName, projectPluginJarProvider,
-                extension.testsDir.map { it.asFile }, extension, defaultNodeInstallDir
+                extension.testsDir.map { it.asFile }, layout, extension, defaultNodeInstallDir
             )
             val journalFilePath = project.layout.buildDirectory.file("plugwright/$envName-journal.jsonl").get().asFile
             val modePackages = mode.runnerPackages(entry.spec)
@@ -201,8 +207,8 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
             val environmentConfigProvider = ctx.environmentConfigProvider
                 ?: project.provider { ConfigNodeBuilder().apply { mode.serialize(entry.spec, this) }.build() }
-            val pluginConfigsProvider = ctx.pluginConfigsProvider
-                ?: project.provider { emptyList() }
+            val pluginConfigsProvider = (ctx.pluginConfigsProvider ?: project.provider { emptyList<PluginRef>() })
+                .map { refs -> refs.map { resolveWorkspacePlugin(it, layout) } }
 
             // A plugin declared by npm name is installed alongside the environment's own
             // runner packages; a plugin given as a path is already in the project.
@@ -223,7 +229,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     name = envName,
                     modeId = mode.id,
                     allowFailure = entry.spec.allowFailure.get(),
-                    testsDir = extension.testsDir.get().asFile,
+                    workspaceDir = layout.workspaceDir,
                     configFile = project.layout.buildDirectory.file("tmp/plugwright/$envName.json").get().asFile,
                     jsonReportFile = File(reportsDirFile, "$envName.json"),
                     junitReportFile = File(File(reportsDirFile, "junit"), "$envName.xml"),
@@ -260,6 +266,14 @@ class PlugwrightCorePlugin : Plugin<Project> {
             if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
             if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
         }
+    }
+
+    /** Turns `plugins { local("stand-reset") }` into the path the compiler writes it to.
+     *  Anything else — an npm name, a path the build script spelled out — passes through. */
+    private fun resolveWorkspacePlugin(ref: PluginRef, layout: PlugwrightLayout): PluginRef {
+        if (!ref.specifier.startsWith(PluginRef.WORKSPACE_SCHEME)) return ref
+        val name = ref.specifier.removePrefix(PluginRef.WORKSPACE_SCHEME)
+        return ref.copy(specifier = File(layout.compiledPluginsDir, "$name.js").absolutePath)
     }
 
     /** Whether a plugin specifier names an npm package rather than a file in the project.
@@ -322,76 +336,12 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     throw GradleException("IO ERROR: Failed to create target directory: ${targetDir.absolutePath}. Check your file permissions.")
                 }
 
-                val packageJson = targetDir.resolve("package.json")
-                if (!packageJson.exists()) {
-                    packageJson.writeText(
-                        """
-                        {
-                          "type": "module",
-                          "scripts": {
-                            "build": "rimraf dist && tsc"
-                          },
-                          "dependencies": {
-                            "@drownek/plugwright": "^2.0.3"
-                          },
-                          "devDependencies": {
-                            "@types/node": "^22.10.5",
-                            "rimraf": "^6.1.3",
-                            "typescript": "^5.7.3"
-                          }
-                        }
-                        """.trimIndent()
-                    )
-                    project.logger.lifecycle("Created: ${packageJson.absolutePath}")
-                }
-
-                val tsconfigJson = targetDir.resolve("tsconfig.json")
-                if (!tsconfigJson.exists()) {
-                    tsconfigJson.writeText(
-                        """
-                        {
-                          "compilerOptions": {
-                            "target": "ES2022",
-                            "module": "ES2022",
-                            "moduleResolution": "node",
-                            "lib": ["ES2022"],
-                            "outDir": "./dist",
-                            "rootDir": ".",
-                            "strict": true,
-                            "esModuleInterop": true,
-                            "skipLibCheck": true,
-                            "forceConsistentCasingInFileNames": true,
-                            "resolveJsonModule": true,
-                            "declaration": false,
-                            "sourceMap": true
-                          },
-                          "include": [
-                            "*.spec.ts"
-                          ],
-                          "exclude": [
-                            "node_modules",
-                            "dist"
-                          ]
-                        }
-                        """.trimIndent()
-                    )
-                    project.logger.lifecycle("Created: ${tsconfigJson.absolutePath}")
-                }
-
-                val testFile = targetDir.resolve("example.spec.ts")
-                if (!testFile.exists()) {
-                    testFile.writeText(
-                        """
-                        import {expect, test} from '@drownek/plugwright';
-
-                        test('help displays message', async ({ player, server }) => {
-                          player.chat('/help');
-                          await expect(player).toHaveReceivedMessage('Help');
-                        });
-                        """.trimIndent()
-                    )
-                    project.logger.lifecycle("Created: ${testFile.absolutePath}")
-                }
+                val layout = PlugwrightLayout.of(targetDir)
+                writeGitignore(project, targetDir)
+                writeIfAbsent(project, targetDir.resolve("package.json"), initTemplate("package.json"))
+                writeIfAbsent(project, targetDir.resolve("tsconfig.json"), initTemplate("tsconfig.json"))
+                writeIfAbsent(project, layout.testsDir.resolve("example.spec.ts"), initTemplate("example.spec.ts"))
+                writeIfAbsent(project, layout.pluginsDir.resolve("example-plugin.ts"), initTemplate("example-plugin.ts"))
 
                 project.logger.lifecycle("Executing 'npm install' in ${targetDir.absolutePath}...")
                 val nodePaths = NodeManager.getOrDownloadNode(defaultNodeInstallDir, extension.nodeVersion.get(), extension.downloadNode.get())
@@ -417,11 +367,74 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     }
                     project.logger.lifecycle("Dependencies installed successfully.")
                     project.logger.lifecycle("\nYou're all set! Run tests with: ./gradlew plugwrightTest")
+                    project.logger.lifecycle(
+                        "To load the example plugin, add plugins { local(\"example-plugin\") } to an environment."
+                    )
                 } catch (e: Exception) {
                     if (e is GradleException) throw e
                     throw GradleException("EXEC FATAL: Failed to launch npm process. Original error: ${e.message}", e)
                 }
             }
         }
+    }
+
+    private fun writeIfAbsent(project: Project, file: File, content: String) {
+        if (file.exists()) return
+        file.parentFile?.mkdirs()
+        file.writeText(content)
+        project.logger.lifecycle("Created: ${file.absolutePath}")
+    }
+
+    /**
+     * One of the files `plugwrightInit` scaffolds, from `src/main/resources/plugwright-init`.
+     *
+     * They are real `.ts` / `.json` files rather than string literals in here, so an editor
+     * checks them and nothing has to be escaped past the Kotlin parser. `@runnerVersion@` is
+     * the only placeholder.
+     */
+    private fun initTemplate(name: String): String {
+        val stream = PlugwrightCorePlugin::class.java.getResourceAsStream("/plugwright-init/$name")
+            ?: throw GradleException("plugwright is missing its '$name' template. Reinstall the plugin.")
+        return stream.bufferedReader().use { it.readText() }
+            .replace("@runnerVersion@", runnerVersionRange())
+    }
+
+    /**
+     * Keeps the three generated directories out of version control.
+     *
+     * Appends to a `.gitignore` that is already there rather than replacing it: the workspace
+     * may well have entries of its own, and none of them are this task's to decide about.
+     */
+    private fun writeGitignore(project: Project, workspaceDir: File) {
+        val gitignore = File(workspaceDir, ".gitignore")
+        val template = initTemplate("gitignore")
+
+        if (!gitignore.exists()) {
+            gitignore.writeText(template)
+            project.logger.lifecycle("Created: ${gitignore.absolutePath}")
+            return
+        }
+
+        val required = template.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+        val present = gitignore.readLines().map { it.trim().trimEnd('/') }.toSet()
+        val missing = required.filter { it.trimEnd('/') !in present }
+        if (missing.isEmpty()) return
+
+        val separator = if (gitignore.readText().endsWith("\n")) "" else "\n"
+        gitignore.appendText(separator + missing.joinToString("\n", postfix = "\n"))
+        project.logger.lifecycle("Added ${missing.joinToString(", ")} to ${gitignore.absolutePath}")
+    }
+
+    /**
+     * npm range for the runner that goes with this plugin: `2.0.4-dev.0` asks for `^2.0.0`.
+     *
+     * The runner and the plugin are released together, so the plugin's own version is the
+     * right thing to derive from — but only down to the minor. A pre-release plugin names a
+     * patch npm has never seen, and `^2.0.0` resolves to the newest 2.x either way.
+     */
+    private fun runnerVersionRange(): String {
+        val match = Regex("""^(\d+)\.(\d+)\.""").find(Banner.pluginVersion()) ?: return "latest"
+        val (major, minor) = match.destructured
+        return "^$major.$minor.0"
     }
 }
