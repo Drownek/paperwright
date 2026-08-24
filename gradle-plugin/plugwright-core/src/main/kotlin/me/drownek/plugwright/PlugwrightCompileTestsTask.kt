@@ -4,7 +4,6 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.google.gson.stream.JsonReader
 import me.drownek.plugwright.api.PlugwrightLayout
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
@@ -12,7 +11,6 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 import java.io.File
-import java.io.StringReader
 
 /**
  * Installs the workspace's npm dependencies and compiles its TypeScript.
@@ -163,8 +161,7 @@ abstract class PlugwrightCompileTestsTask : AbstractNodeTask() {
         if (!tsconfigFile.exists()) return
 
         val config = try {
-            JsonParser.parseReader(JsonReader(StringReader(tsconfigFile.readText())).apply { isLenient = true })
-                .asJsonObject
+            JsonParser.parseString(tsconfigFile.readText()).asJsonObject
         } catch (e: Exception) {
             logger.warn(
                 "Could not update ${tsconfigFile.absolutePath} (${e.message}). Point its \"include\" at " +
