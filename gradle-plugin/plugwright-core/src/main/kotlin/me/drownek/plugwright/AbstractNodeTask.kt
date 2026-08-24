@@ -15,6 +15,11 @@ import java.io.File
  */
 abstract class AbstractNodeTask : DefaultTask() {
 
+    private companion object {
+        /** What `cmd /c` acts on rather than hands to the program it runs. */
+        const val CMD_SPECIAL_CHARACTERS = "^&|<>()!%\" \t"
+    }
+
     @get:Input
     abstract val nodeVersion: Property<String>
 
@@ -44,7 +49,7 @@ abstract class AbstractNodeTask : DefaultTask() {
         val isWindows = System.getProperty("os.name").lowercase().contains("win")
         val cmdName = File(command[0]).nameWithoutExtension.lowercase()
         val cmd = if (isWindows && (cmdName == "npm" || cmdName == "node")) {
-            listOf("cmd", "/c") + command
+            listOf("cmd", "/c") + command.map { quoteForCmd(it) }
         } else {
             command.toList()
         }
@@ -66,6 +71,25 @@ abstract class AbstractNodeTask : DefaultTask() {
                 Runtime.getRuntime().removeShutdownHook(shutdownHook)
             } catch (_: IllegalStateException) {}
         }
+    }
+
+    /**
+     * Makes an argument survive the `cmd /c` in front of it.
+     *
+     * `cmd` re-parses the line it is handed and `^` is its escape character, so an npm range
+     * like `@scope/pkg@^1.2.0` reaches npm as `@scope/pkg@1.2.0` — an exact version nobody
+     * published, reported as "No matching version found". Java quotes an argument only when
+     * it holds a space or a redirection, and `^` is neither, so the quoting that makes it
+     * literal has to happen here.
+     *
+     * An argument already carrying a quote of its own is left alone: it is either quoted
+     * already or means something by it, and Java rejects a quoted argument with a quote
+     * inside outright.
+     */
+    private fun quoteForCmd(argument: String): String = when {
+        argument.none { it in CMD_SPECIAL_CHARACTERS } -> argument
+        argument.contains('"') -> argument
+        else -> "\"$argument\""
     }
 
     protected fun runProcess(

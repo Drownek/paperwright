@@ -4,3 +4,5 @@ node_modules/
 dist/
 # Whatever the environments write while they run: servers, worlds, logs
 generated/
+# Generated from the npm { } block; may hold registry credentials
+.npmrc

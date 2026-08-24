@@ -40,6 +40,20 @@ description: "Start running your first test in less than 5 minutes."
     <Tip>
       If you already have Node.js installed on your system, you can comment out `downloadNode.set(true)` to speed up initialization. Otherwise, leave it uncommented.
     </Tip>
+
+    If npm at your company goes through a private registry, add an `npm { }` block now — the next step installs packages, and it will need it:
+
+    ```kotlin
+    plugwright {
+        npm {
+            registry("https://nexus.corp/repository/npm-group/") {
+                authToken(secret.env("NPM_TOKEN"))
+            }
+        }
+    }
+    ```
+
+    Plugwright writes that to a gitignored `.npmrc` in the workspace before each install. See [Configuration](/configuration#npm-registries).
   </Step>
 
   <Step title="Initialization">
@@ -54,7 +68,7 @@ description: "Start running your first test in less than 5 minutes."
       tests/example.spec.ts          your specs go here
       plugins/example-plugin.ts      hooks, fixtures and matchers
       package.json, tsconfig.json
-      .gitignore                     node_modules, dist, generated
+      .gitignore                     node_modules, dist, generated, .npmrc
     ```
 
     Everything a run generates — the compiled specs, the server the local environment starts — stays inside that directory, under `dist` and `generated`. See [Project Layout](/project-layout).

@@ -4,9 +4,11 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import me.drownek.plugwright.api.NpmConfig
 import me.drownek.plugwright.api.PlugwrightLayout
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
@@ -43,6 +45,15 @@ abstract class PlugwrightCompileTestsTask : AbstractNodeTask() {
     @get:Input
     abstract val runnerPackages: ListProperty<String>
 
+    /**
+     * The registries npm should install from, from the build script's `npm { }` block.
+     *
+     * Holds [me.drownek.plugwright.api.SecretRef]s rather than credentials: the values are
+     * read when the `.npmrc` is written, in [compile].
+     */
+    @get:Input
+    abstract val npmConfig: Property<NpmConfig>
+
     init {
         group = "verification"
         description = "Install npm dependencies and compile the E2E tests"
@@ -70,6 +81,10 @@ abstract class PlugwrightCompileTestsTask : AbstractNodeTask() {
 
         val nodePaths = resolveNode()
         val npmEnv = nodePathEnv(nodePaths)
+
+        // Before any install: both the dependency install below and the runner packages after
+        // it run with this workspace as their working directory, so one file covers both.
+        NpmrcWriter.write(workspace, npmConfig.getOrElse(NpmConfig.EMPTY), logger)
 
         // Install dependencies if needed
         if (!File(workspace, "node_modules").exists()) {
