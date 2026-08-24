@@ -298,8 +298,11 @@ class PlugwrightCorePlugin : Plugin<Project> {
     }
 
     /** `@scope/name@^1.0.0` → `@scope/name`; the version separator is the last `@`, which for
-     *  a scoped package is never the leading one. */
+     *  a scoped package is never the leading one. A git/URL spec (`git+ssh://git@host/repo`,
+     *  `https://user:pass@registry/pkg`) carries its own `@`s that aren't a version separator
+     *  at all, so it is returned as-is instead of being cut at the last one. */
     private fun npmPackageNameOf(spec: String): String {
+        if (spec.contains("://") || spec.startsWith("git+")) return spec
         val separator = spec.lastIndexOf('@')
         return if (separator > 0) spec.substring(0, separator) else spec
     }
