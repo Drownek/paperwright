@@ -49,7 +49,11 @@ abstract class AbstractNodeTask : DefaultTask() {
         val isWindows = System.getProperty("os.name").lowercase().contains("win")
         val cmdName = File(command[0]).nameWithoutExtension.lowercase()
         val cmd = if (isWindows && (cmdName == "npm" || cmdName == "node")) {
-            listOf("cmd", "/c") + command.map { quoteForCmd(it) }
+            // "call" after /c so the line handed to cmd starts with a letter, not a quote:
+            // when it starts with a quote and holds more than two quotes total (guaranteed
+            // once quoteForCmd wraps an argument), cmd strips the outer pair itself, mangling
+            // a spaced npm.cmd path Java already quoted.
+            listOf("cmd", "/c", "call") + command.map { quoteForCmd(it) }
         } else {
             command.toList()
         }
