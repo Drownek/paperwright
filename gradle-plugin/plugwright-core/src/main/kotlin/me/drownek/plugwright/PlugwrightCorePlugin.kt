@@ -210,6 +210,11 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     runtimePackage.set(ref.name)
                     ref.export?.let { runtimeExport.set(it) }
                 }
+                if (extension.reuse.enabled.get()) {
+                    reuseEnabled.set(true)
+                    extension.reuse.maxPlayers.orNull?.let { reuseMaxPlayers.set(it) }
+                    reuseStay.set(extension.reuse.stay)
+                }
 
                 if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
                 if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
@@ -261,6 +266,9 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     journalFile = journalFilePath,
                     runtimePackage = runtimeRef?.name,
                     runtimeExport = runtimeRef?.export,
+                    reuseEnabled = extension.reuse.enabled.get().takeIf { it },
+                    reuseMaxPlayers = extension.reuse.maxPlayers.orNull,
+                    reuseStay = extension.reuse.stay.orNull,
                 )
                 ctx.prepareTaskRef?.let { matrixPrepareTasks += it }
             }
@@ -298,8 +306,11 @@ class PlugwrightCorePlugin : Plugin<Project> {
     }
 
     /** `@scope/name@^1.0.0` → `@scope/name`; the version separator is the last `@`, which for
-     *  a scoped package is never the leading one. */
+     *  a scoped package is never the leading one. A git/URL spec (`git+ssh://git@host/repo`,
+     *  `https://user:pass@registry/pkg`) carries its own `@`s that aren't a version separator
+     *  at all, so it is returned as-is instead of being cut at the last one. */
     private fun npmPackageNameOf(spec: String): String {
+        if (spec.contains("://") || spec.startsWith("git+")) return spec
         val separator = spec.lastIndexOf('@')
         return if (separator > 0) spec.substring(0, separator) else spec
     }

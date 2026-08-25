@@ -59,6 +59,14 @@ abstract class PlugwrightExtension(project: Project) : LegacyEnvironmentProperti
         matrix.action()
     }
 
+    /** Settings for reusing a connected bot across test boundaries. See [reuse]. */
+    val reuse: ReuseSpec = project.objects.newInstance(ReuseSpec::class.java)
+
+    /** Configures reuse: `reuse { enabled.set(true); maxPlayers.set(4); stay.set(true) }`. */
+    fun reuse(action: ReuseSpec.() -> Unit) {
+        reuse.action()
+    }
+
     /** Registries the workspace installs from, and the credentials for them. See [npm]. */
     val npm: NpmSpec = NpmSpec()
 

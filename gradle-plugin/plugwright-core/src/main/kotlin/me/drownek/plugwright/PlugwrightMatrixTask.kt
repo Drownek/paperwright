@@ -30,6 +30,9 @@ internal data class MatrixEnvironmentInput(
     val journalFile: File?,
     val runtimePackage: String? = null,
     val runtimeExport: String? = null,
+    val reuseEnabled: Boolean? = null,
+    val reuseMaxPlayers: Int? = null,
+    val reuseStay: Boolean? = null,
 )
 
 private data class EnvironmentSummary(val total: Int, val passed: Int, val failed: Int, val skipped: Int, val durationMs: Long)
@@ -128,6 +131,9 @@ abstract class PlugwrightMatrixTask : AbstractNodeTask() {
                 journalFile = env.journalFile,
                 runtimePackage = env.runtimePackage,
                 runtimeExport = env.runtimeExport,
+                reuseEnabled = env.reuseEnabled,
+                reuseMaxPlayers = env.reuseMaxPlayers,
+                reuseStay = env.reuseStay,
             )
             RunnerLauncher.writeConfig(entry)
             val cliJs = RunnerLauncher.resolveCliJs(env.workspaceDir)

@@ -4,7 +4,9 @@
 
 import { expect, test } from '@drownek/plugwright';
 
-test('makeOp', async ({ player }) => {
+// Needs a player that isn't already op, or the server never sends the "Made ... a server
+// operator" confirmation this test checks for.
+test('makeOp', { reuse: { excludeAbilities: ['op'] } }, async ({ player }) => {
     // This executes op server command, and we wait for response from server
     // so when await completes, we are sure player is op.
     await player.makeOp();

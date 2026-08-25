@@ -38,6 +38,13 @@ object RunnerLauncher {
         val runtimeExport: String? = null,
         /** Crash-recovery journal path for `Session.journal`; null disables on-disk persistence. */
         val journalFile: File? = null,
+        /** null means "reuse off", matching a config with no `tests.reuse` key at all. */
+        val reuseEnabled: Boolean? = null,
+        /** null means "runner default" — only meaningful when [reuseEnabled] is true. */
+        val reuseMaxPlayers: Int? = null,
+        /** Whether a reused bot stays connected between tests; null means "runner default"
+         *  (true). Only meaningful when [reuseEnabled] is true. */
+        val reuseStay: Boolean? = null,
     )
 
     fun writeConfig(entry: Entry) {
@@ -66,6 +73,13 @@ object RunnerLauncher {
                 if (entry.excludeTests.isNotEmpty()) putStrings("exclude", entry.excludeTests) else putNull("exclude")
                 // null means "runner default", which TEST_TIMEOUT can still override.
                 putNull("timeoutMs")
+                if (entry.reuseEnabled != null) {
+                    obj("reuse") {
+                        put("enabled", entry.reuseEnabled)
+                        entry.reuseMaxPlayers?.let { put("maxPlayers", it) }
+                        entry.reuseStay?.let { put("stay", it) }
+                    }
+                }
             }
             if (entry.jsonReportFile != null || entry.junitReportFile != null) {
                 obj("reports") {

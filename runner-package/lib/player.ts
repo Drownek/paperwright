@@ -45,7 +45,13 @@ export class PlayerWrapper {
     private _botOptions?: BotConnectionOptions;
     private _spawnPromise: Promise<void> | null = null;
     private _listenersBot: Bot | null = null;
-    private account?: Account;
+    private _account?: Account;
+    /** Labels describing server state this player is known to carry — set automatically by
+     *  `makeOp`/`deOp`/`setGameMode`, and by hand via `mark`/`unmark` for anything else. Survives
+     *  `rejoin()`: it describes server state, which a reconnect doesn't touch. Used by
+     *  `PlayerRegistry` to match a reused player against a test's requirements; the core never
+     *  parses or verifies a label's meaning. */
+    private readonly _abilities = new Set<string>();
 
     constructor(bot: Bot, session: Session) {
         this.bot = bot;
@@ -119,12 +125,12 @@ export class PlayerWrapper {
         // is a prompt no authentication plugin can answer.
         this._registerPersistentListeners();
 
-        if (this.account) {
+        if (this._account) {
             // Authentication has to happen while the server still holds the player: AuthMe and
             // friends keep an unauthenticated bot out of the world entirely, so waiting for the
             // spawn first would wait for something login is the precondition of.
             await Promise.race([this._spawnPromise, this._waitForLogin(timeout)]);
-            await this.session.onPlayerCreate?.(this, { account: this.account, env: this.session.env });
+            await this.session.onPlayerCreate?.(this, { account: this._account, env: this.session.env });
         }
 
         await this._spawnPromise;
@@ -154,7 +160,13 @@ export class PlayerWrapper {
 
     /** @internal */
     _setAccount(account: Account): void {
-        this.account = account;
+        this._account = account;
+    }
+
+    /** The account this player connected with. Set for every player the runner creates
+     *  (`createPlayer` always calls `_setAccount`); undefined only if constructed by hand. */
+    get account(): Account | undefined {
+        return this._account;
     }
 
     private _registerPersistentListeners(): void {
@@ -190,6 +202,29 @@ export class PlayerWrapper {
 
     setServerWrapper(server: ServerWrapper): void {
         this.serverWrapper = server;
+    }
+
+    /** Read-only snapshot of this player's ability labels. */
+    get abilities(): ReadonlySet<string> {
+        return this._abilities;
+    }
+
+    /** Records that this player carries `ability`. A statement, not a check — nothing here
+     *  verifies it against real server state. */
+    mark(ability: string): void {
+        this._abilities.add(ability);
+    }
+
+    /** Removes `ability`. No-op if the player never carried it. */
+    unmark(ability: string): void {
+        this._abilities.delete(ability);
+    }
+
+    private markGameMode(mode: string): void {
+        for (const ability of this._abilities) {
+            if (ability.startsWith('gamemode:')) this._abilities.delete(ability);
+        }
+        this._abilities.add(`gamemode:${mode}`);
     }
 
     getCurrentGui(): GuiWrapper | null {
@@ -259,24 +294,39 @@ export class PlayerWrapper {
             const response = await this.serverWrapper!.executeAndWait(command);
             // "Made X a server operator" on success, "Nothing changed. The player already is
             // an operator" when it was already granted — both mean the player is op now.
-            if (/operator/i.test(response)) return;
+            if (/operator/i.test(response)) {
+                this.mark('op');
+                return;
+            }
             throw new Error(`Player ${this.username} was not opped: ${response.trim() || 'no response from the console'}`);
         }
 
+        const messagesSince = this.messageBuffer.length;
+        const consoleSince = this.session.consoleLog.length;
         this.serverWrapper!.execute(command);
 
+        // "Made X a server operator" reaches the player's own chat. "Nothing changed. The
+        // player already is an operator" — the case a reused, already-op player hits on a
+        // second `makeOp()` — never does; it only ever shows up in the server's own log.
         await poll(
-            () => this.messageBuffer.find(m => m.includes(`Made ${this.username} a server operator`)),
+            () =>
+                this.messageBuffer.slice(messagesSince).find(m => m.includes(`Made ${this.username} a server operator`)) ??
+                this.session.consoleLog.slice(consoleSince).find(m => /operator/i.test(m)),
             { message: `Player ${this.username} was not opped` }
         );
+        this.mark('op');
     }
 
     async deOp(): Promise<void> {
         await this.executeAndSync(`minecraft:deop ${this.username}`);
+        this.unmark('op');
     }
 
     async setGameMode(mode: 'survival' | 'creative' | 'adventure' | 'spectator'): Promise<void> {
-        if (this.bot.game.gameMode === mode) return;
+        if (this.bot.game.gameMode === mode) {
+            this.markGameMode(mode);
+            return;
+        }
         this.requireServer();
         this.serverWrapper!.execute(`minecraft:gamemode ${mode} ${this.username}`);
 
@@ -284,6 +334,7 @@ export class PlayerWrapper {
             () => this.bot.game.gameMode === mode ? true : undefined,
             { message: `Game mode did not change to "${mode}"` }
         );
+        this.markGameMode(mode);
     }
 
     async teleport(x: number, y: number, z: number): Promise<void> {

@@ -77,6 +77,10 @@ test('the /debug dev command', { environments: ['local'] }, async ({ player }) =
 });
 ```
 
+## Reuse is a different axis
+
+`requires` and `environments` decide whether a test runs at all. `reuse` (see [Writing Tests](/writing-tests)) decides which bot it gets once it's already running — a filter never skips a test because of its `reuse` option. The two do interact on one environment setting: `capabilities.playerReuse` disables reuse for the whole environment when it's `false`, or forces every player off the server between tests when it's `'rejoin'` — neither affects anything a test declared through `requires`.
+
 ## Skips are reported
 
 Every skipped test lands in the report with its reason:
