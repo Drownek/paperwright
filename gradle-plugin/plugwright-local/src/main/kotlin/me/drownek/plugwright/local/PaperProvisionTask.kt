@@ -32,6 +32,9 @@ abstract class PaperProvisionTask : DefaultTask() {
     abstract val minecraftVersion: Property<String>
 
     @get:Input
+    abstract val port: Property<Int>
+
+    @get:Input
     @get:Optional
     abstract val pluginJar: Property<File>
 
@@ -102,6 +105,16 @@ abstract class PaperProvisionTask : DefaultTask() {
                 lines.add("connection-throttle=0")
             }
 
+            val portLine = "server-port=${port.get()}"
+            val hasPort = lines.any { it.trim().startsWith("server-port=") }
+            if (hasPort) {
+                lines = lines.map { line ->
+                    if (line.trim().startsWith("server-port=")) portLine else line
+                }.toMutableList()
+            } else {
+                lines.add(portLine)
+            }
+
             // Disable spawn protection so tests can damage players near spawn
             val hasSpawnProtection = lines.any { it.trim().startsWith("spawn-protection=") }
             if (hasSpawnProtection) {
@@ -114,8 +127,11 @@ abstract class PaperProvisionTask : DefaultTask() {
 
             Files.write(serverProperties.toPath(), lines)
         } else {
-            logger.lifecycle("Creating server.properties with online-mode=false, connection-throttle=0 and spawn-protection=0")
-            Files.write(serverProperties.toPath(), listOf("online-mode=false", "connection-throttle=0", "spawn-protection=0"))
+            logger.lifecycle("Creating server.properties with online-mode=false, connection-throttle=0, spawn-protection=0 and server-port=${port.get()}")
+            Files.write(
+                serverProperties.toPath(),
+                listOf("online-mode=false", "connection-throttle=0", "spawn-protection=0", "server-port=${port.get()}")
+            )
         }
 
         configureBukkitSettings(runDirectory)
