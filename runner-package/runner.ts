@@ -7,7 +7,7 @@ import { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator } from './lib/wr
 import { testRegistry, resetRegistry } from './lib/test-registry.js';
 import { Session } from './lib/session.js';
 import { PluginHost } from './lib/plugin-host.js';
-import { runTestCase } from './lib/test-runner.js';
+import { runSerialBlock, runTestCase } from './lib/test-runner.js';
 import { skipReasonForOptions } from './lib/skip-reason.js';
 import { LocalEnvironment } from './lib/environments/local.js';
 import { externalEnvironment } from './lib/environments/external.js';
@@ -19,7 +19,7 @@ import type { Environment } from './lib/environment.js';
 import type { EnvironmentConfig, LocalEnvironmentConfig, RunnerConfig } from './lib/config.js';
 import type { ExternalEnvironmentConfig } from './lib/environments/external.js';
 import type { TestResult } from './lib/types.js';
-import type { TestCase } from './lib/test-registry.js';
+import type { SerialBlock, TestCase } from './lib/test-registry.js';
 import type { Account, AccountPool } from './lib/account.js';
 
 // Enable source map support for accurate TypeScript stack traces
@@ -30,7 +30,7 @@ export { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator };
 export { PlayerWrapper };
 export { ServerWrapper } from './lib/server.js';
 export { test, opTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
-export type { TestOptions, TestCase } from './lib/test-registry.js';
+export type { TestOptions, TestCase, SerialOptions, SerialBlock } from './lib/test-registry.js';
 export { expect } from './lib/matchers.js';
 export { loadRunnerConfig, resolveSecret, isSecretRef } from './lib/config.js';
 export type { RunnerConfig, EnvironmentConfig, TestsConfig, LocalEnvironmentConfig, SecretRef, PluginConfig } from './lib/config.js';
@@ -133,6 +133,20 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
             return skipReasonForOptions(env, config.environment.name, testCase.requires, testCase.environments);
         }
 
+        /** Why a whole `describe.serial` block should not run. The block's own `requires` /
+         *  `environments` come first, then the tests inside it: a filter that takes out one step
+         *  of a chain leaves the rest asserting against state nothing produced, so it takes out
+         *  the block instead. */
+        function blockSkipReason(block: SerialBlock): string | null {
+            const own = skipReasonForOptions(env, config.environment.name, block.requires, block.environments);
+            if (own) return own;
+            for (const testCase of block.tests) {
+                const reason = skipReasonFor(testCase);
+                if (reason) return `"${testCase.name}" ${reason}, and a serial block runs whole or not at all`;
+            }
+            return null;
+        }
+
         /** Imports one compiled spec file (a fresh `testRegistry`) and runs everything it
          *  registered, appending results to `testResults`. Shared by user specs and every
          *  plugin-inherited test file. */
@@ -140,7 +154,23 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
             resetRegistry();
             await import(pathToFileURL(file).href);
 
-            for (const testCase of testRegistry) {
+            for (const item of testRegistry) {
+                if (item.kind === 'serial') {
+                    const { block } = item;
+                    const skipReason = blockSkipReason(block);
+                    if (skipReason) {
+                        console.log(pc.dim(`  Serial block: ${block.name} - SKIPPED (${skipReason})`));
+                        for (const testCase of block.tests) {
+                            testResults.push({ file, testName: testCase.name, passed: true, durationMs: 0, skipped: true, skipReason, plugin: pluginName });
+                        }
+                        continue;
+                    }
+
+                    testResults.push(...await runSerialBlock({ file, block, session, plugins, connOpts, timeoutMs, pluginName }));
+                    continue;
+                }
+
+                const { testCase } = item;
                 const skipReason = skipReasonFor(testCase);
                 if (skipReason) {
                     console.log(pc.dim(`  Test: ${testCase.name} - SKIPPED (${skipReason})`));

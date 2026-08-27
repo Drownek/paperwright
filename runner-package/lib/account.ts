@@ -85,12 +85,17 @@ export class AccountPool {
     /** Names handed out by a `%s` pattern and still checked out. Kept so [release] can tell a
      *  one-shot identity from a numbered slot without a flag on [Account] itself. */
     private readonly uniqueOut = new Set<string>();
+    /** Every declared `pool`/`microsoft` name, free or not — so a request for one by name can
+     *  say whether it is taken or was never configured at all. */
+    private readonly declaredNames = new Set<string>();
 
     constructor(config: AccountsConfig | null | undefined) {
         for (const entry of config?.pool ?? []) {
+            this.declaredNames.add(entry.username);
             this.queue.push({ username: entry.username, secret: entry.password, auth: 'offline', justCreated: false });
         }
         for (const username of config?.microsoft?.accounts ?? []) {
+            this.declaredNames.add(username);
             this.queue.push({
                 username,
                 auth: 'microsoft',
@@ -114,7 +119,13 @@ export class AccountPool {
         return this.queue.length + (this.autoRegister?.max ?? 0);
     }
 
-    async lease(): Promise<Account> {
+    /** Leases the next free account, or the one named by [username] — a `describe.serial` block
+     *  that has to run as one specific account. A name that is taken, or was never declared,
+     *  throws: quietly substituting another account is how a test ends up asserting against
+     *  state that belongs to somebody else. */
+    async lease(username?: string): Promise<Account> {
+        if (username !== undefined) return this.leaseNamed(username);
+
         const entry = this.queue.shift();
         if (entry) {
             const { secret, ...account } = entry;
@@ -136,6 +147,19 @@ export class AccountPool {
         throw new Error(
             'AccountPool exhausted: no pool/microsoft account is free and accounts.autoRegister has reached its max'
         );
+    }
+
+    private leaseNamed(username: string): Account {
+        const idx = this.queue.findIndex(e => e.username === username);
+        if (idx === -1) {
+            throw new Error(this.declaredNames.has(username)
+                ? `Account "${username}" is already leased by another test`
+                : `Account "${username}" is not in this environment's accounts pool`);
+        }
+        const { secret, ...account } = this.queue.splice(idx, 1)[0];
+        return secret && account.password === undefined
+            ? { ...account, password: resolveSecret(secret) }
+            : account;
     }
 
     /** Returns a leased account, `finally`-style. A numbered `autoRegister` account comes back

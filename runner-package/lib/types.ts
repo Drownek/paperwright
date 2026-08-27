@@ -4,7 +4,14 @@ import type { ServerWrapper } from './server.js';
 export interface TestContext {
     player: PlayerWrapper;
     server: ServerWrapper;
-    createPlayer: (options?: { username?: string }) => Promise<PlayerWrapper>;
+    /** Connects an extra bot. Inside a `describe.serial` block, `as` names it: the same name in
+     *  a later test of that block returns the same bot instead of connecting another. Outside a
+     *  block the name is scoped to the one test, which is as long as the bot lives anyway. */
+    createPlayer: (options?: { username?: string; as?: string }) => Promise<PlayerWrapper>;
+    /** Says the player is in a state the tests after this one were not written for. Inside a
+     *  `describe.serial` block that stops the block: the rest is reported skipped. Outside one
+     *  it does nothing — the bot is disconnected at the end of the test either way. */
+    invalidatePlayer: (player: PlayerWrapper, reason?: string) => void;
     signal: AbortSignal;
     /** Registers a LIFO finalizer that always runs after the test body, before afterEach.
      *  Errors are logged but never override the test result. */
