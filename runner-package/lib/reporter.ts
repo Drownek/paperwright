@@ -126,7 +126,6 @@ export function writeJsonReport(path: string, environmentName: string, testResul
             error: r.error ? r.error.message : null,
             skipReason: r.skipReason ?? null,
             plugin: r.plugin ?? null,
-            reuse: r.reuse ?? null,
         })),
     };
 

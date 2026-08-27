@@ -84,8 +84,7 @@ export class AccountPool {
     }
 
     /** Total configured slots (pool + microsoft + autoRegister's max), not the number
-     *  currently free. Used to size a fixed-slot consumer (e.g. reuse's `maxPlayers`
-     *  default) before anything has been leased. */
+     *  currently free. */
     capacity(): number {
         return this.queue.length + (this.autoRegister?.max ?? 0);
     }

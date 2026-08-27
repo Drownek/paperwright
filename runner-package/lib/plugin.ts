@@ -30,10 +30,6 @@ export interface PluginTestRef {
      *  `suite` runs alongside user specs as regular tests, tagged with the plugin's name
      *  in reports. */
     mode: 'preflight' | 'suite';
-    /** How this file relates to reuse. Absent means "follow the run's general rule". `false`
-     *  forces every test in the file onto a fresh connection — the shape a preflight auth
-     *  check needs, since it exists to prove the login flow, not to skip it. */
-    reuse?: false;
 }
 
 export type MatcherFn = (this: any, ...args: any[]) => unknown;
@@ -50,10 +46,6 @@ export interface PlugwrightPlugin<O = unknown> {
      *  the first. A one-shot "first test" can't cover a second bot or a rejoin, which is
      *  why this is a hook rather than a `preflight` test. */
     onPlayerCreate?(player: PlayerWrapper, ctx: { account: Account; env: Environment }): Promise<void> | void;
-    /** Fired before a reused player is handed to the next test — never on the first connection,
-     *  where `onPlayerCreate` already runs. The core has already done its own safe minimum
-     *  (closing a leftover open window); anything beyond that is the plugin's call. */
-    onPlayerReuse?(player: PlayerWrapper, ctx: { account: Account; env: Environment }): Promise<void> | void;
     beforeEach?(ctx: TestContext): Promise<void> | void;
     afterEach?(ctx: TestContext): Promise<void> | void;
     extendContext?(ctx: TestContext): Record<string, unknown> | void;

@@ -59,9 +59,7 @@ let resolved: Required<Omit<AuthAuthmeOptions, 'password'>> & { password?: strin
 export default definePlugin<AuthAuthmeOptions>({
     name: 'authme',
     apiVersion: 1,
-    // Preflight exists to prove the login/register flow actually runs — a reused, already
-    // authenticated player would skip straight past what this test checks.
-    tests: [{ file: join(__dirname, 'auth.spec.js'), mode: 'preflight', reuse: false }],
+    tests: [{ file: join(__dirname, 'auth.spec.js'), mode: 'preflight' }],
 
     setup({ options }) {
         resolved = { ...DEFAULTS, ...options };

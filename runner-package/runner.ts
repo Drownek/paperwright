@@ -29,14 +29,12 @@ installSourceMapSupport();
 export { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator };
 export { PlayerWrapper };
 export { ServerWrapper } from './lib/server.js';
-export { test, opTest, reuseTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
+export { test, opTest, describe, beforeEach, afterEach } from './lib/test-registry.js';
 export type { TestOptions, TestCase } from './lib/test-registry.js';
 export { expect } from './lib/matchers.js';
 export { loadRunnerConfig, resolveSecret, isSecretRef } from './lib/config.js';
-export type { RunnerConfig, EnvironmentConfig, TestsConfig, LocalEnvironmentConfig, SecretRef, PluginConfig, ReuseConfig } from './lib/config.js';
+export type { RunnerConfig, EnvironmentConfig, TestsConfig, LocalEnvironmentConfig, SecretRef, PluginConfig } from './lib/config.js';
 export type { TestContext, TestResult } from './lib/types.js';
-export { PlayerRegistry } from './lib/player-registry.js';
-export type { ReuseOptions } from './lib/player-registry.js';
 export type { Environment, EnvironmentCapabilities, BotConnectionOptions } from './lib/environment.js';
 export type { ServerConsole } from './lib/console.js';
 export { Session } from './lib/session.js';
@@ -94,37 +92,6 @@ async function findSpecFiles(dir: string): Promise<string[]> {
     return results;
 }
 
-/** `tests.reuse`, narrowed by the environment's own `capabilities.playerReuse`. An environment
- *  that can't tolerate a long-lived bot always wins over the config — outright when it declares
- *  `false`, and down to a rejoin per test when it declares `'rejoin'`. */
-function resolveReuse(config: RunnerConfig, env: Environment): { enabled: boolean; maxPlayers: number; stay: boolean | 'rejoin' } {
-    const requested = config.tests.reuse?.enabled ?? false;
-    if (!requested) return { enabled: false, maxPlayers: 4, stay: true };
-
-    if (env.capabilities.playerReuse === false) {
-        console.log(pc.yellow(
-            `[Reuse] tests.reuse.enabled is true, but environment "${config.environment.name}" declares ` +
-            'capabilities.playerReuse = false — running with reuse off for this environment.'
-        ));
-        return { enabled: false, maxPlayers: 4, stay: true };
-    }
-
-    const maxPlayers = config.tests.reuse?.maxPlayers
-        ?? Math.max(1, (env.accounts?.()?.capacity() ?? 5) - 1);
-
-    if (env.capabilities.playerReuse === 'rejoin') {
-        if (config.tests.reuse?.stay ?? true) {
-            console.log(pc.yellow(
-                `[Reuse] environment "${config.environment.name}" declares capabilities.playerReuse = 'rejoin' — ` +
-                'players leave at the end of every test and rejoin when a later one takes them, whatever tests.reuse.stay says.'
-            ));
-        }
-        return { enabled: true, maxPlayers, stay: 'rejoin' };
-    }
-
-    return { enabled: true, maxPlayers, stay: config.tests.reuse?.stay ?? true };
-}
-
 export async function runTestSession(config: RunnerConfig = loadRunnerConfig()): Promise<void> {
     const testFileFilters = config.tests.include ?? null;
     const testNameFilters = config.tests.names ?? null;
@@ -134,12 +101,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
     const testResults: TestResult[] = [];
 
     const env = await resolveEnvironment(config.environment);
-    const reuse = resolveReuse(config, env);
-    const session = new Session(env, config.journal ?? null, reuse.maxPlayers);
-    if (reuse.enabled) {
-        const stayLabel = reuse.stay === 'rejoin' ? "stay=false (environment's own 'rejoin')" : `stay=${reuse.stay}`;
-        console.log(pc.dim(`[Reuse] enabled, maxPlayers=${reuse.maxPlayers}, ${stayLabel}`));
-    }
+    const session = new Session(env, config.journal ?? null);
     const plugins = new PluginHost();
     await plugins.load(config.plugins ?? []);
     // Must happen before the first spec file is imported — see PluginHost.registerMatchers.
@@ -174,7 +136,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         /** Imports one compiled spec file (a fresh `testRegistry`) and runs everything it
          *  registered, appending results to `testResults`. Shared by user specs and every
          *  plugin-inherited test file. */
-        async function runFile(file: string, pluginName: string | null, forceReuseOff: boolean = false): Promise<void> {
+        async function runFile(file: string, pluginName: string | null): Promise<void> {
             resetRegistry();
             await import(pathToFileURL(file).href);
 
@@ -186,22 +148,17 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
                     continue;
                 }
 
-                const result = await runTestCase({
-                    file, testCase, session, plugins, connOpts, timeoutMs, pluginName,
-                    environmentName: config.environment.name,
-                    reuseEnabled: reuse.enabled, reuseStay: reuse.stay, forceReuseOff,
-                    onExtraResult: r => testResults.push(r),
-                });
+                const result = await runTestCase({ file, testCase, session, plugins, connOpts, timeoutMs, pluginName });
                 testResults.push(result);
             }
         }
 
         // Preflight: plugin auth/setup tests, run before anything else. A failure aborts the
         // whole session.
-        for (const { file, pluginName, reuse: fileReuse } of plugins.testFiles('preflight')) {
+        for (const { file, pluginName } of plugins.testFiles('preflight')) {
             console.log(`\n${pc.blue(pc.bold(`Running preflight tests from: ${file} ${pc.dim(`(plugin ${pluginName})`)}`))}`);
             const before = testResults.length;
-            await runFile(file, pluginName, fileReuse === false);
+            await runFile(file, pluginName);
             const failed = testResults.slice(before).find(r => !r.skipped && !r.passed);
             if (failed) {
                 throw new Error(`Preflight test "${failed.testName}" failed (plugin ${pluginName}): ${failed.error?.message ?? 'unknown error'}`);
@@ -230,32 +187,16 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         }
 
         // Suite: plugin tests that run alongside user specs, tagged with the plugin's name.
-        for (const { file, pluginName, reuse: fileReuse } of plugins.testFiles('suite')) {
+        for (const { file, pluginName } of plugins.testFiles('suite')) {
             console.log(`\n${pc.blue(pc.bold(`Running tests from: ${file} ${pc.dim(`(plugin ${pluginName})`)}`))}`);
-            await runFile(file, pluginName, fileReuse === false);
+            await runFile(file, pluginName);
         }
 
     } finally {
         await plugins.runCleanup(session, 'session');
         await plugins.teardown();
-        // Registry-owned bots first: it disconnects and forgets each entry, so the plain
-        // sweep after it only has to deal with whatever was never handed to the registry.
-        await session.players.disconnectAll();
         await session.disconnectAllBots();
         await env.teardown();
-
-        if (reuse.enabled) {
-            const reusedCount = testResults.filter(r => r.reuse?.reused).length;
-            if (reusedCount > 0) {
-                // Under `stay: false` the connection is not what carried over — the identity is,
-                // and the bot rejoined under it — so the count is worth reporting either way.
-                const rejoined = testResults.filter(r => r.reuse?.reused && !r.reuse.stay).length;
-                const how = rejoined === reusedCount ? 'a registry player, rejoined'
-                    : rejoined > 0 ? `a registry player (${rejoined} of them rejoined)`
-                    : 'an existing connection instead of reconnecting';
-                console.log(pc.dim(`[Reuse] ${reusedCount} test(s) reused ${how}`));
-            }
-        }
 
         if (config.reports?.json) {
             writeJsonReport(config.reports.json, config.environment.name, testResults);

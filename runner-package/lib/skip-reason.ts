@@ -18,10 +18,9 @@ export function missingCapabilities(env: Environment, required: string[]): strin
     });
 }
 
-/** Shared by `runFile`'s `skipReasonFor` (for a normal `TestCase`) and `reuseTest` execution
- *  (for a `ReuseTestCase`) — both check the same two `TestOptions` fields, `environments` and
- *  `requires`, against the same running environment. Name filters (`tests.names`/`exclude`) stay
- *  local to `runFile`: they're a run-level concern, not part of what a test itself declares. */
+/** The two `TestOptions` fields a test itself declares — `environments` and `requires` —
+ *  checked against the running environment. Name filters (`tests.names`/`exclude`) stay local
+ *  to `runFile`: they're a run-level concern, not part of what a test declares. */
 export function skipReasonForOptions(
     env: Environment,
     environmentName: string,

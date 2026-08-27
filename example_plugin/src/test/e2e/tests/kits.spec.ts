@@ -15,8 +15,8 @@ test('kit has cooldown', async ({ player }) => {
 });
 
 // Op bypasses permission checks in Bukkit by default, so this only proves anything against a
-// player that isn't one.
-test('VIP kit requires permission', { reuse: { excludeAbilities: ['op'] } }, async ({ player }) => {
+// player that isn't one — which every test gets, since each one connects a fresh bot.
+test('VIP kit requires permission', async ({ player }) => {
   player.chat('/kit vip');
   await expect(player).toHaveReceivedMessage('no permission');
 });
