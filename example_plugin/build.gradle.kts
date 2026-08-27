@@ -126,13 +126,14 @@ plugwright {
                 local("stand-reset")
             }
 
-            // Matched against test names. What is left out here is what the stand cannot give
-            // back: a balance, a kit or an arena slot that is spent once and stays spent. Op
-            // and inventory are reset per test by the stand-reset plugin instead. multi-bot is
-            // out for a different reason — it names its second bot, and a named bot is not a
-            // pool account, so nothing knows its password.
+            // Matched against test names. What is left out here is what no command puts back:
+            // an arena slot that is filled once and stays filled, and a first join, which only
+            // happens on an account the server has never seen. Op, inventory, balance and kit
+            // cooldowns are reset per test by the stand-reset plugin instead. multi-bot is out
+            // for a different reason — it names its second bot, and a named bot is not a pool
+            // account, so nothing knows its password.
             excludeTests.set(listOf(
-                "balance", "send money", "kit", "arena", "shop", "buy", "first join", "multi-bot"
+                "arena", "first join", "multi-bot"
             ))
         }
     }
