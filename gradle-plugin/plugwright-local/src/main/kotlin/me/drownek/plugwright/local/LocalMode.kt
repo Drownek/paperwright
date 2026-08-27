@@ -78,6 +78,7 @@ object LocalMode : PlugwrightMode<LocalEnvironmentSpec> {
             dependsOn(clean)
             runDir.set(spec.runDir)
             minecraftVersion.set(spec.minecraftVersion)
+            port.set(spec.port)
             pluginJar.set(ctx.projectPluginJar)
             pluginUrls.set(spec.pluginUrls)
             runDirFiles.set(spec.runDirFiles)

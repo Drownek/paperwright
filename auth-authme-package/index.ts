@@ -89,7 +89,13 @@ export default definePlugin<AuthAuthmeOptions>({
         // pool account outlives the run that created it. So wait for either prompt and answer
         // the one that actually arrived. Register is tested first because AuthMe's register
         // prompt names the password too, and would otherwise match the login pattern.
-        const joinIndex = player.getMessageBufferIndex();
+        //
+        // Hardcoded to 0 rather than `player.getMessageBufferIndex()`: the login prompt can
+        // arrive during the handshake, before this handler even runs, so reading the buffer
+        // index here can already be past it. Scanning from 0 risks matching a stale prompt from
+        // a previous connection, but this buffer is fresh per player and the loss of precision
+        // is worth never missing the real prompt.
+        const joinIndex = 0;
         const since = (index: number, pattern: RegExp): string | undefined =>
             player.messageBuffer.slice(index).find((m: string) => pattern.test(m));
 

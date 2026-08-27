@@ -18,7 +18,7 @@ export default definePlugin({
         // and the tests that depend on this reset are excluded there anyway.
         if (!server.session.env.capabilities.console) return;
 
-        await server.executeAndWait(`minecraft:deop ${player.username}`);
+        await player.deOp();
         await server.executeAndWait(`minecraft:clear ${player.username}`);
     },
 });
