@@ -1,4 +1,4 @@
-import {expect, test} from '@drownek/plugwright';
+import {expect, test} from '@plugwright/runner';
 
 test('command permission works', async ({ player }) => {
   player.chat('/example gui-settings');

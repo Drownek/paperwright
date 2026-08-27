@@ -1,4 +1,4 @@
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('help command shows available commands', async ({ player }) => {
   player.chat('/help');

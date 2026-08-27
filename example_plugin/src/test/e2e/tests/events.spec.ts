@@ -1,4 +1,4 @@
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 // Depends on the join itself, not just on a player's current state, so it always needs a
 // brand-new connection — reuse would hand it a player who already joined once before.

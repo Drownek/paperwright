@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write      # for creating GitHub releases
-      id-token: write      # required for OIDC trusted publishing
+      id-token: write      # signs the provenance attestation
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,11 +31,19 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@11.5.1
 
-      - name: Publish NPM package
-        working-directory: runner-package
+      # The plugin packages link the runner through `file:../runner-package`, so they are
+      # installed together rather than one directory at a time. Each package builds itself
+      # from `prepublishOnly`, and the script publishes all three.
+      - name: Publish NPM packages
+        env:
+          # A trusted publisher is configured per package, and no name under @plugwright
+          # exists yet, so there is nothing for OIDC to authenticate against on the first
+          # release. A granular token scoped to the org carries it; once all three names
+          # exist, `npm trust` takes over and this block comes out.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm ci
-          npm publish --access public --provenance
+          npm run install:packages
+          npm run publish:packages -- --provenance
 
       - name: Publish Gradle plugin
         working-directory: gradle-plugin
@@ -44,5 +52,5 @@ jobs:
           GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
         run: |
           chmod +x gradlew
-          ./gradlew publishPlugins
+          ./gradlew publishToPublicRepository
 

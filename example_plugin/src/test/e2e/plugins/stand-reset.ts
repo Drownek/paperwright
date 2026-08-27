@@ -1,4 +1,4 @@
-import { definePlugin } from '@drownek/plugwright';
+import { definePlugin } from '@plugwright/runner';
 
 /**
  * Undoes what one test leaves on a leased account before the next test gets it.

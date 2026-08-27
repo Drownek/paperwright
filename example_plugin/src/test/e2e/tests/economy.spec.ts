@@ -1,4 +1,4 @@
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('player starts with default balance', async ({ player }) => {
   player.chat('/balance');

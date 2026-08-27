@@ -81,3 +81,9 @@ release.properties
 dependency-reduced-pom.xml
 
 .serena/
+
+# Publishing credentials for a private registry. See .env.example.
+.env
+
+# Local, per-developer notes kept beside the checked-in docs.
+*.local.md

@@ -1,4 +1,4 @@
-import { definePlugin } from '@drownek/plugwright';
+import { definePlugin } from '@plugwright/runner';
 
 /**
  * A runner plugin: hooks that run around every test, plus fixtures the tests can
@@ -27,7 +27,7 @@ export default definePlugin({
 });
 
 // Without this block the fixture still works and TypeScript still complains.
-declare module '@drownek/plugwright' {
+declare module '@plugwright/runner' {
     interface TestContext {
         say: (message: string) => void;
     }

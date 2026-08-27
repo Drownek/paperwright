@@ -40,7 +40,7 @@ export class PluginHost {
             if (plugin.apiVersion !== undefined && plugin.apiVersion > PLUGIN_API_VERSION) {
                 throw new Error(
                     `Plugin "${plugin.name}" was built against plugin API v${plugin.apiVersion}, ` +
-                    `this runner supports up to v${PLUGIN_API_VERSION}. Update @drownek/plugwright.`
+                    `this runner supports up to v${PLUGIN_API_VERSION}. Update @plugwright/runner.`
                 );
             }
 

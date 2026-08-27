@@ -1,4 +1,4 @@
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('warp command teleports player', async ({ player }) => {
   player.chat('/warp spawn');

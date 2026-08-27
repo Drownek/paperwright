@@ -1,17 +1,17 @@
-# @drownek/plugwright
+# @plugwright/runner
 
 End-to-end testing runner for Paper/Spigot Minecraft plugins.
 
 ## Installation
 
 ```bash
-npm install @drownek/plugwright
+npm install @plugwright/runner
 ```
 
 ## Quick Start
 
 ```javascript
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('player can join server', async ({ player }) => {
   player.chat('/help');

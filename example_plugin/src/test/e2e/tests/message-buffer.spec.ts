@@ -1,4 +1,4 @@
-import { expect, test } from '@drownek/plugwright';
+import { expect, test } from '@plugwright/runner';
 
 test('Cross-bot message separation', async ({ player, createPlayer }) => {
     const friend = await createPlayer({ username: 'FriendBot' });

@@ -1,4 +1,4 @@
-import { test } from '@drownek/plugwright';
+import { test } from '@plugwright/runner';
 
 // If the login/register handshake in `onPlayerCreate` failed or timed out, `createPlayer()`
 // would already have thrown before this test body ever runs — so reaching here at all is

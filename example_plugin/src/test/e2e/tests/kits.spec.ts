@@ -1,4 +1,4 @@
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('starter kit gives items', async ({ player }) => {
   player.chat('/kit starter');

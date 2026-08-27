@@ -2,7 +2,7 @@
  * Tests for basic PlayerWrapper methods.
  */
 
-import { expect, test } from '@drownek/plugwright';
+import { expect, test } from '@plugwright/runner';
 
 // Needs a player that isn't already op, or the server never sends the "Made ... a server
 // operator" confirmation this test checks for.

@@ -8,7 +8,7 @@ description: "Learn how to write and structure your Plugwright tests."
 Tests use a simple API similar to Jest:
 
 ```typescript
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('test description', async ({ player }) => {
   // Your test code here
@@ -20,7 +20,7 @@ test('test description', async ({ player }) => {
 Create `src/test/e2e/tests/first.spec.ts` — specs live in `tests`, in whatever subdirectories you like ([Project Layout](/project-layout)):
 
 ```typescript
-import { test, expect } from '@drownek/plugwright';
+import { test, expect } from '@plugwright/runner';
 
 test('player receives welcome message', async ({ player }) => {
   await expect(player).toHaveReceivedMessage('Welcome');
@@ -112,7 +112,7 @@ await expect(player).toContainItem('item_name')
 The framework provides several exported utilities for advanced waiting and polling:
 
 ```typescript
-import { test, sleep, poll, waitForAssertion, waitUntil, waitForStable } from '@drownek/plugwright';
+import { test, sleep, poll, waitForAssertion, waitUntil, waitForStable } from '@plugwright/runner';
 
 test('advanced waiting', async ({ player }) => {
   // Sleep for 1 second

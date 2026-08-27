@@ -46,6 +46,12 @@
           "reports",
           "custom-modes"
         ]
+      },
+      {
+        "group": "Maintaining",
+        "pages": [
+          "publishing"
+        ]
       }
     ]
   }
