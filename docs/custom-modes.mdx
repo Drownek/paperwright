@@ -152,10 +152,6 @@ class VelocityEnvironment implements Environment {
         arbitraryUsernames: true,
         lifecycle: true,
         cleanupStrategy: 'compensating',
-        // Absent means "allowed". `false` if a bot surviving a test boundary at all would
-        // break the environment (a per-test world reset); 'rejoin' if only a bot *sitting*
-        // there is the problem (an idle-kick timeout, an AFK check).
-        playerReuse: true,
     };
 
     async setup(session: Session): Promise<void> { /* connect, probe, warm up */ }
@@ -167,9 +163,9 @@ class VelocityEnvironment implements Environment {
 }
 ```
 
-Capabilities are a promise the runner holds you to. Tests declaring `requires: ['op']` are skipped when you report `op: false`, so report what is true after `setup()` rather than what the build script hoped for. `consoleOutput` is three-valued (`full`, `responses`, `none`) because a console that answers its own commands still cannot show a test the server log. `playerReuse: false` overrides `tests.reuse.enabled` for the whole run against this environment — set it when a long-lived bot would break something the environment can't tell tests about any other way. `playerReuse: 'rejoin'` is the softer form for a server that only objects to an *idle* bot: reuse stays on, but every entry leaves at the end of its test and rejoins when a later one takes it, and no `tests.reuse.stay` or per-test `reuse: { stay: true }` can talk it out of that.
+Capabilities are a promise the runner holds you to. Tests declaring `requires: ['op']` are skipped when you report `op: false`, so report what is true after `setup()` rather than what the build script hoped for. `consoleOutput` is three-valued (`full`, `responses`, `none`) because a console that answers its own commands still cannot show a test the server log.
 
-`accounts()` and `beforeJoin()` are optional. Returning no pool means every bot gets a throwaway `Test_<uuid>` username, which is what `local` does.
+`accounts()` and `beforeJoin()` are optional. Returning no pool means every bot gets a throwaway `pw_<rand>` username, which is what `local` does. A pool is also what makes `describe.serial('...', { account: 'pw_0001' })` possible: without one, a block asking for a named account fails rather than running as somebody else.
 
 ## Checking it works
 

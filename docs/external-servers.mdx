@@ -77,7 +77,7 @@ The admin bot connects through the same code path as a test bot, which means it 
 A local server accepts any username; a stand usually does not. `accounts { }` builds a pool that tests lease from and return to, merged from three sources:
 
 - **`pool`** — accounts that already exist, with their passwords.
-- **`autoRegister`** — generated names from a pattern, marked `justCreated` on their first lease so an authentication plugin registers them instead of logging in. The pattern must start with `pw_`, so test accounts stay recognizable on a server full of real players.
+- **`autoRegister`** — generated names from a pattern, marked `justCreated` on their first lease so an authentication plugin registers them instead of logging in. The pattern must start with `pw_`, so test accounts stay recognizable on a server full of real players. The placeholder decides what happens to a name afterwards: `pw_%04d` numbers a fixed set of accounts the run keeps coming back to, while `pw_%s` puts a random suffix there and never hands the same name out twice. See below.
 - **`microsoft`** — online-mode accounts. No password; mineflayer authenticates with a cached device-code token. Point `cacheDir` somewhere outside `build/`, and warm the cache before CI ever needs it, because the device-code flow is interactive.
 
 One account is leased per bot and returned in a `finally`, whatever the test did. When the pool is empty and `autoRegister` has hit `max`, `lease()` throws rather than hand the same identity to two connected bots.
@@ -94,11 +94,25 @@ That is a request for a specific identity, not for whatever is free — so nothi
 A leased account comes back with the previous test's inventory, balance and op status. Nothing resets it for you. Reset what you can in a plugin's `beforeEach`, exclude what you can't, and treat `capabilities.freshState = false` as the honest description it is.
 </Warning>
 
-## Reuse and the account pool
+## Numbered slots or fresh names
 
-With `tests.reuse` on ([Configuration](/configuration)), a registry entry holds its leased account for as long as the entry lives, not just for one test — an account checked out by a long-lived player doesn't return to the pool until that player is evicted, invalidated, or the run ends. Size `accounts { }` accordingly: `maxPlayers` defaults to the pool's capacity minus one so a test's own `createPlayer()` still has a spare slot, but a pool exactly as big as `maxPlayers` leaves nothing free for it.
+`autoRegister` answers a question the fixed `pool` can't: where does a name come from when the server has never seen this test before? Which form you want depends on what the stand can clean up.
 
-An environment that can't tolerate a bot surviving a test boundary at all — a per-test world reset — should report `capabilities.playerReuse = false` after `setup()` rather than let reuse quietly misbehave. When the problem is narrower than that, and it usually is on a public server, `capabilities.playerReuse = 'rejoin'` keeps the reuse and drops the idling: the bot leaves at the end of every test and rejoins under the same account when a later test takes its entry. `tests.reuse.stay = false` asks for the same thing from the config side. Either way the account stays leased while the entry is parked, so pool sizing doesn't change. See [Writing a Mode](/custom-modes).
+`pw_%04d` gives you `pw_0001` … `pw_000N`, leased in turn and returned when a test ends. The set is finite and the accounts are provisioned once, which is what a stand with permission groups or a whitelist needs. The cost is that every test inherits whatever the last one left on that account, so anything you can't reset with a command has to stay out of the suite (`excludeTests`) or be undone in a plugin's `beforeEach`.
+
+`pw_%s` generates a name per lease — `pw_a8f2` — and never reuses it. Each test starts on an account with no history, which is the closest a stand gets to what `local` hands out for free. The cost is a registration the server keeps: after a few runs the login plugin's database is full of test accounts, and pruning them is on you. `max` still caps how many bots are connected at once.
+
+## Naming an account from a test
+
+A `describe.serial` block can ask for one specific pool account:
+
+```ts
+describe.serial('vip shop', { account: 'pw_0001' }, () => {
+  // ...
+});
+```
+
+That's for a scenario tied to state somebody provisioned on that account — a permission group, a starting balance. The account has to be in the pool and free; anything else fails the block instead of quietly running as a different player. See [Writing Tests](/writing-tests).
 
 ## Checking the stand before you test
 
