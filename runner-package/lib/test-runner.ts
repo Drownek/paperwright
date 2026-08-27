@@ -1,9 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import pc from 'picocolors';
 import { PlayerWrapper } from './player.js';
 import { ServerWrapper } from './server.js';
 import { formatDuration } from './reporter.js';
-import { syntheticAccount } from './account.js';
+import { randomSuffix, syntheticAccount } from './account.js';
 import type { Account, AccountPool } from './account.js';
 import type { Session } from './session.js';
 import type { PluginHost } from './plugin-host.js';
@@ -46,7 +45,7 @@ export async function runTestCase(params: RunTestCaseParams): Promise<TestResult
         const pool = options?.username ? null : session.env.accounts?.() ?? null;
         const account: Account = pool
             ? await pool.lease()
-            : syntheticAccount(options?.username || `Test_${randomUUID().split('-')[0]}`);
+            : syntheticAccount(options?.username || `pw_${randomSuffix()}`);
 
         try {
             const botUsername = account.username;
