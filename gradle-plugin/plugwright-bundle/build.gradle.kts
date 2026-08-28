@@ -14,6 +14,7 @@ dependencies {
     implementation(gradleApi())
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.yaml:snakeyaml:2.0")
+    implementation("org.jetbrains.gradle.plugin.idea-ext:org.jetbrains.gradle.plugin.idea-ext.gradle.plugin:1.4.1")
 
     // Compile-time only, all four: none of them is published under its own coordinates, and
     // their classes reach the runtime classpath through this module's merged jar below.
@@ -23,8 +24,8 @@ dependencies {
     // that exist in no repository, so every consumer resolving this plugin from a maven
     // repository failed with "Could not find io.github.drownek:plugwright-core".
     //
-    // gson and snakeyaml above stay `implementation` deliberately: those are real artifacts
-    // that are not merged into the jar, so the POM does have to ask for them.
+    // gson, snakeyaml and idea-ext above stay `implementation` deliberately: those are real
+    // artifacts that are not merged into the jar, so the POM does have to ask for them.
     compileOnly(project(":plugwright-api"))
     compileOnly(project(":plugwright-core"))
     compileOnly(project(":plugwright-local"))
