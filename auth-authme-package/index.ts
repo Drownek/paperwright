@@ -97,6 +97,12 @@ export default definePlugin<AuthAuthmeOptions>({
         const since = (index: number, pattern: RegExp): string | undefined =>
             player.messageBuffer.slice(index).find((m: string) => pattern.test(m));
 
+        // The server occasionally sends no prompt at all on a reconnect (#57) — AuthMe still
+        // considers the account logged in from a connection that never fully closed. Rather
+        // than fail the whole test over one missing prompt, assume login (never registration:
+        // a silent reconnect can only happen to an account that already exists) and let the
+        // command below run into either a real prompt AuthMe queued up in the meantime, or an
+        // "already logged in" reply — both success/authenticated patterns already match it.
         const isRegistration = await poll(
             () => {
                 if (since(joinIndex, registerPrompt)) return true;
@@ -107,7 +113,7 @@ export default definePlugin<AuthAuthmeOptions>({
                 timeout: resolved.timeoutMs,
                 message: `authme: never saw a login or register prompt for "${account.username}"`,
             },
-        );
+        ).catch(() => false);
 
         // Everything below only looks at messages newer than the command. A server's greeting
         // often carries a word like "welcome", which would otherwise pass for confirmation
