@@ -28,6 +28,6 @@ jobs:
           npm run build
       - uses: drownek/plugwright-action@v1
         with:
-          java-version: "17"
+          java-version: "26"
           node-version: "24"
           working-directory: "./example_plugin"
