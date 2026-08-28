@@ -1,6 +1,6 @@
 {
   "name": "@drownek/plugwright",
-  "version": "2.0.4-dev.0",
+  "version": "2.0.4",
   "description": "End-to-end testing framework for Paper/Spigot Minecraft plugins",
   "type": "module",
   "main": "dist/runner.js",
