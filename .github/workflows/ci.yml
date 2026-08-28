@@ -36,6 +36,14 @@ jobs:
           java-version: "17"
           node-version: "24"
           working-directory: "./example_plugin"
+      # LocalMode's own server launch resolves a Java 21 toolchain (build.gradle.kts pins
+      # languageVersion 21 for Paper 1.21.11) regardless of the Gradle-daemon JDK above - Gradle
+      # downloads it on demand. start.sh has no such resolution, it just runs whatever "java" is
+      # on PATH, so put a real JDK 21 there before it needs one.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
       # The LocalMode run above leaves Paper, cache and libraries under generated/local/run/ -
       # stand reuses that same directory (build.gradle.kts points it at localhost:25565). Only
       # start.sh is missing: generated/ is gitignored, so we copy in the tracked launcher.
