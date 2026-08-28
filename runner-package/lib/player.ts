@@ -48,9 +48,9 @@ export class PlayerWrapper {
     private _account?: Account;
     /** Labels describing server state this player is known to carry — set automatically by
      *  `makeOp`/`deOp`/`setGameMode`, and by hand via `mark`/`unmark` for anything else. Survives
-     *  `rejoin()`: it describes server state, which a reconnect doesn't touch. Used by
-     *  `PlayerRegistry` to match a reused player against a test's requirements; the core never
-     *  parses or verifies a label's meaning. */
+     *  `rejoin()`: it describes server state, which a reconnect doesn't touch. Nothing in the
+     *  core reads a label's meaning; they exist for a test (or a plugin) to leave a note on a
+     *  player one step of a `describe.serial` block can read in the next. */
     private readonly _abilities = new Set<string>();
 
     constructor(bot: Bot, session: Session) {

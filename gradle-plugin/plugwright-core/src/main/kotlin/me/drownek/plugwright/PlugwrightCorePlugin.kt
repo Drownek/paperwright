@@ -210,12 +210,6 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     runtimePackage.set(ref.name)
                     ref.export?.let { runtimeExport.set(it) }
                 }
-                if (extension.reuse.enabled.get()) {
-                    reuseEnabled.set(true)
-                    extension.reuse.maxPlayers.orNull?.let { reuseMaxPlayers.set(it) }
-                    reuseStay.set(extension.reuse.stay)
-                }
-
                 if (project.hasProperty("testFiles")) testFiles.set(project.property("testFiles") as String)
                 if (project.hasProperty("testNames")) testNames.set(project.property("testNames") as String)
             }
@@ -266,9 +260,6 @@ class PlugwrightCorePlugin : Plugin<Project> {
                     journalFile = journalFilePath,
                     runtimePackage = runtimeRef?.name,
                     runtimeExport = runtimeRef?.export,
-                    reuseEnabled = extension.reuse.enabled.get().takeIf { it },
-                    reuseMaxPlayers = extension.reuse.maxPlayers.orNull,
-                    reuseStay = extension.reuse.stay.orNull,
                 )
                 ctx.prepareTaskRef?.let { matrixPrepareTasks += it }
             }

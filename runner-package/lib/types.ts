@@ -1,14 +1,17 @@
 import type { PlayerWrapper } from './player.js';
 import type { ServerWrapper } from './server.js';
-import type { ReuseOptions } from './player-registry.js';
 
 export interface TestContext {
     player: PlayerWrapper;
     server: ServerWrapper;
-    createPlayer: (options?: { username?: string; reuse?: false | string | ReuseOptions }) => Promise<PlayerWrapper>;
-    /** Marks a player unfit for the next test: it disconnects instead of being handed out
-     *  again. No-op for a player reuse never picked up (a plain fresh connection). */
-    invalidatePlayer: (player: PlayerWrapper) => void;
+    /** Connects an extra bot. Inside a `describe.serial` block, `as` names it: the same name in
+     *  a later test of that block returns the same bot instead of connecting another. Outside a
+     *  block the name is scoped to the one test, which is as long as the bot lives anyway. */
+    createPlayer: (options?: { username?: string; as?: string }) => Promise<PlayerWrapper>;
+    /** Says the player is in a state the tests after this one were not written for. Inside a
+     *  `describe.serial` block that stops the block: the rest is reported skipped. Outside one
+     *  it does nothing — the bot is disconnected at the end of the test either way. */
+    invalidatePlayer: (player: PlayerWrapper, reason?: string) => void;
     signal: AbortSignal;
     /** Registers a LIFO finalizer that always runs after the test body, before afterEach.
      *  Errors are logged but never override the test result. */
@@ -27,7 +30,4 @@ export interface TestResult {
     skipReason?: string;
     /** Name of the plugin this test was inherited from, or null for a user spec. */
     plugin?: string | null;
-    /** How the primary player was obtained, and whether it stayed connected afterwards.
-     *  Absent when reuse is off for this run. */
-    reuse?: { key: string; reused: boolean; stay: boolean; abilities: string[] };
 }

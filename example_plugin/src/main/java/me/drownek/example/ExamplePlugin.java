@@ -107,6 +107,12 @@ public final class ExamplePlugin extends JavaPlugin implements CommandExecutor, 
                 String target = args[1];
                 int amount = Integer.parseInt(args[2]);
                 balances.put(target, balances.getOrDefault(target, 1000) + amount);
+            } else if (args.length >= 3 && args[0].equalsIgnoreCase("set")) {
+                // What a stand needs to put an account back where it started: give only ever
+                // adds, so a balance spent by one test would stay spent for the next one.
+                String target = args[1];
+                balances.put(target, Integer.parseInt(args[2]));
+                sender.sendMessage("Set balance of " + target + " to $" + args[2]);
             }
             return true;
         }
@@ -174,6 +180,20 @@ public final class ExamplePlugin extends JavaPlugin implements CommandExecutor, 
                             p.getInventory().addItem(new ItemStack(Material.DIAMOND_SWORD));
                             p.getInventory().addItem(new ItemStack(Material.BREAD));
                         }
+                    }
+                } else if (args[0].equalsIgnoreCase("reset") && args.length >= 2) {
+                    // Admin-only, and only meaningful from a console: it exists so a stand can
+                    // hand the next test an account whose kit is claimable again.
+                    if (!sender.isOp()) {
+                        sender.sendMessage("no permission");
+                        return true;
+                    }
+                    Player target = Bukkit.getPlayerExact(args[1]);
+                    if (target == null) {
+                        sender.sendMessage("Player not found: " + args[1]);
+                    } else {
+                        lastKitUse.remove(target.getUniqueId());
+                        sender.sendMessage("Kit cooldown reset for " + target.getName());
                     }
                 } else if (args[0].equalsIgnoreCase("vip")) {
                     if (!sender.isOp() && !sender.hasPermission("kit.vip")) {

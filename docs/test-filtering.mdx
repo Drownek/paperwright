@@ -77,9 +77,15 @@ test('the /debug dev command', { environments: ['local'] }, async ({ player }) =
 });
 ```
 
-## Reuse is a different axis
+## Serial blocks filter as one
 
-`requires` and `environments` decide whether a test runs at all. `reuse` (see [Writing Tests](/writing-tests)) decides which bot it gets once it's already running — a filter never skips a test because of its `reuse` option. The two do interact on one environment setting: `capabilities.playerReuse` disables reuse for the whole environment when it's `false`, or forces every player off the server between tests when it's `'rejoin'` — neither affects anything a test declared through `requires`.
+A [`describe.serial`](/writing-tests) block is filtered whole. If any filter — a name pattern, `excludeTests`, `requires`, `environments` — rules out one test in the block, every test in it is skipped and reports the same reason:
+
+```
+  Serial block: kit lifecycle - SKIPPED ("kit lifecycle > is on cooldown right after" excluded by tests.exclude (matches "cooldown"), and a serial block runs whole or not at all)
+```
+
+Running half a chain is worse than running none of it: the steps left behind assert against state the skipped step was supposed to create. `-PtestNames` against a serial block is an all-or-nothing choice, so match the block's name rather than one test inside it.
 
 ## Skips are reported
 

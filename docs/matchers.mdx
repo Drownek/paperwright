@@ -80,7 +80,7 @@ Strict equality check using `Object.is()`. Use for primitives.
 expect(42).toBe(42);
 expect('hello').toBe('hello');
 expect(true).toBe(true);
-expect(player.username).toBe('Test_123');
+expect(player.username).toBe('pw_a8f2');
 ```
 
 ### `toEqual(value)`
@@ -164,7 +164,7 @@ expect(Math.PI).toBeCloseTo(3.14, 2);
 ```javascript
 expect('Hello World').toMatch(/World/);
 expect('Hello World').toMatch('World');
-expect(player.username).toMatch(/Test_\d+/);
+expect(player.username).toMatch(/pw_[0-9a-f]+/);
 ```
 
 ### `toContain(substring)`
