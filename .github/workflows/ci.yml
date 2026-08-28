@@ -52,11 +52,16 @@ jobs:
       # Running in parallel with test-example-plugin means this job can't reuse its
       # generated/local/run/ either - provision the same Paper server here instead of just
       # running plugwrightTest, which would also run (and duplicate) the local suite.
+      # plugwrightCompileTests is the other half: plugwrightPingStand/plugwrightTestStand
+      # don't depend on it themselves (ExternalMode assumes the stand is already up, nothing
+      # to provision - see registerTasks in ExternalMode.kt), they just expect node_modules
+      # to already have what npm(...) plugin refs and console { rcon {} } need.
       - uses: drownek/plugwright-action@v1
         with:
           java-version: "17"
           node-version: "24"
           working-directory: "./example_plugin"
+          gradle-args: plugwrightProvisionLocal plugwrightCompileTests
           gradle-args: plugwrightProvisionLocal
       # The provisioning above resolves a Java 21 toolchain for itself (build.gradle.kts pins
       # languageVersion 21 for Paper 1.21.11), but that's Gradle's own on-demand download, not
