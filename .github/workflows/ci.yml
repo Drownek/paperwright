@@ -29,7 +29,7 @@ jobs:
           npm run build:packages
       - uses: drownek/plugwright-action@v1
         with:
-          java-version: "17"
+          java-version: "21"
           node-version: "24"
           working-directory: "./example_plugin"
 
@@ -58,18 +58,10 @@ jobs:
       # to already have what npm(...) plugin refs and console { rcon {} } need.
       - uses: drownek/plugwright-action@v1
         with:
-          java-version: "17"
+          java-version: "21"
           node-version: "24"
           working-directory: "./example_plugin"
           gradle-args: plugwrightProvisionLocal plugwrightCompileTests
-      # The provisioning above resolves a Java 21 toolchain for itself (build.gradle.kts pins
-      # languageVersion 21 for Paper 1.21.11), but that's Gradle's own on-demand download, not
-      # something start.sh can reach - it just runs whatever "java" is on PATH, which
-      # plugwright-action pinned to 17 above for the Gradle daemon. Put a real JDK 21 there.
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
       # generated/ is gitignored, so start.sh - the launcher example_plugin/README.md tells
       # developers to hand-write - never made it into the provisioned run dir. Copy in the
       # tracked copy.
