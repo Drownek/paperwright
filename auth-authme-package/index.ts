@@ -28,6 +28,10 @@ export interface AuthAuthmeOptions {
     authenticatedPattern?: string;
     /** How long to wait for each prompt/confirmation before giving up. */
     timeoutMs?: number;
+    /** Fail the connection when no login/register prompt arrives at all, instead of assuming
+     *  login and sending the command anyway. Some servers require the prompt as proof the
+     *  player isn't already authenticated by something else; most don't. */
+    failOnMissingPrompt?: boolean;
     /** Password used for accounts that carry none of their own — the throwaway identities an
      *  environment without an account pool generates per bot. Plugin options travel as plain
      *  values, so only use this where the password is worth nothing: a local, disposable
@@ -43,6 +47,7 @@ const DEFAULTS: Required<Omit<AuthAuthmeOptions, 'password'>> = {
     successPattern: 'success|welcome|logged in|authenticat',
     authenticatedPattern: 'success(ful)? login|logged in|authenticat',
     timeoutMs: 15000,
+    failOnMissingPrompt: false,
 };
 
 // `onPlayerCreate` doesn't receive the plugin's options — only `setup()` does — so the
@@ -97,13 +102,15 @@ export default definePlugin<AuthAuthmeOptions>({
         const since = (index: number, pattern: RegExp): string | undefined =>
             player.messageBuffer.slice(index).find((m: string) => pattern.test(m));
 
-        // The server occasionally sends no prompt at all on a reconnect (#57) — AuthMe still
+        // The server occasionally sends no prompt at all on a reconnect — AuthMe still
         // considers the account logged in from a connection that never fully closed. Rather
         // than fail the whole test over one missing prompt, assume login (never registration:
         // a silent reconnect can only happen to an account that already exists) and let the
         // command below run into either a real prompt AuthMe queued up in the meantime, or an
         // "already logged in" reply — both success/authenticated patterns already match it.
-        const isRegistration = await poll(
+        // `failOnMissingPrompt` opts back into the strict behavior, for servers where a missing
+        // prompt is a real problem rather than a stale session.
+        const promptSeen = poll(
             () => {
                 if (since(joinIndex, registerPrompt)) return true;
                 if (since(joinIndex, loginPrompt)) return false;
@@ -113,7 +120,8 @@ export default definePlugin<AuthAuthmeOptions>({
                 timeout: resolved.timeoutMs,
                 message: `authme: never saw a login or register prompt for "${account.username}"`,
             },
-        ).catch(() => false);
+        );
+        const isRegistration = resolved.failOnMissingPrompt ? await promptSeen : await promptSeen.catch(() => false);
 
         // Everything below only looks at messages newer than the command. A server's greeting
         // often carries a word like "welcome", which would otherwise pass for confirmation
