@@ -24,7 +24,7 @@ This one connects to a server that is already running and leaves it running. Pro
 cd src/test/e2e/generated/local/run && ./start.sh
 ```
 
-`generated/` is not in version control, so `start.sh` is yours to write. Anything that starts the jar with Java 21 will do:
+`generated/` is not in version control, so `start.sh` is yours to write. Anything that starts the jar with Java 21 will do — CI keeps a tracked copy at `src/test/e2e/stand-run/start.sh` and copies it in before starting the server:
 
 ```sh
 #!/usr/bin/env sh
