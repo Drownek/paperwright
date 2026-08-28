@@ -62,7 +62,6 @@ jobs:
           node-version: "24"
           working-directory: "./example_plugin"
           gradle-args: plugwrightProvisionLocal plugwrightCompileTests
-          gradle-args: plugwrightProvisionLocal
       # The provisioning above resolves a Java 21 toolchain for itself (build.gradle.kts pins
       # languageVersion 21 for Paper 1.21.11), but that's Gradle's own on-demand download, not
       # something start.sh can reach - it just runs whatever "java" is on PATH, which
