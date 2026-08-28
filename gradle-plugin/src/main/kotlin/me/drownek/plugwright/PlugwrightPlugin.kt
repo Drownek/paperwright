@@ -344,7 +344,7 @@ class PlugwrightPlugin : Plugin<Project> {
         // Auto-trigger npm install on IntelliJ IDEA sync if IDEA plugin is applied
         project.plugins.withId("idea") {
             project.pluginManager.apply("org.jetbrains.gradle.plugin.idea-ext")
-            project.afterEvaluate {
+            val configureIdea = {
                 val ideaModel = project.extensions.findByType(IdeaModel::class.java)
                 if (ideaModel != null) {
                     val ideaProject = ideaModel.project as? ExtensionAware
@@ -352,6 +352,11 @@ class PlugwrightPlugin : Plugin<Project> {
                     val triggers = settings?.extensions?.findByType(TaskTriggersConfig::class.java)
                     triggers?.afterSync(plugwrightNpmInstall)
                 }
+            }
+            if (project.state.executed) {
+                configureIdea()
+            } else {
+                project.afterEvaluate { configureIdea() }
             }
         }
     }

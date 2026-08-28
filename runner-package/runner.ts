@@ -206,11 +206,16 @@ export async function runTestSession(): Promise<void> {
                     const botUsername = options?.username || `Test_${uniqueId}`;
                     console.log(`${pc.cyan('[Bot]')} Creating bot: ${pc.bold(botUsername)}`);
 
+                    let mineflayerVersion = process.env.MC_VERSION;
+                    if (mineflayerVersion && mineflayerVersion.startsWith('26.1.')) {
+                        mineflayerVersion = '26.1';
+                    }
+
                     const bot = createBot({
                         host: 'localhost',
                         port: 25565,
                         username: botUsername,
-                        version: process.env.MC_VERSION,
+                        version: mineflayerVersion,
                         auth: 'offline',
                     });
 
@@ -220,7 +225,7 @@ export async function runTestSession(): Promise<void> {
                     player._setBotOptions({
                         host: 'localhost',
                         port: 25565,
-                        version: process.env.MC_VERSION,
+                        version: mineflayerVersion,
                         auth: 'offline',
                     });
 

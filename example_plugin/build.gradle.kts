@@ -6,7 +6,7 @@ plugins {
 }
 
 plugwright {
-    minecraftVersion.set("1.21.11")
+    minecraftVersion.set("26.1.2")
     acceptEula.set(true)
     testsDir.set(file("src/test/e2e"))
     downloadPlugins {
@@ -82,6 +82,6 @@ tasks.withType<JavaCompile> {
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(26))
     }
 }
