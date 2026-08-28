@@ -31,7 +31,9 @@ The same block works on a `LocalMode` environment. A local server running AuthMe
 
 ## Which command it sends
 
-The server decides, not the account. `account.justCreated` is a hint from the account pool, and it is wrong every time a pool account outlives the run that created it — that is the second run against any stand. So the plugin waits for either prompt and answers whichever arrived. The register pattern is tested first, since AuthMe's register prompt mentions the password too and would otherwise look like a login prompt.
+The server decides, not the account. `account.justCreated` is a hint from the account pool, and it is wrong every time a pool account outlives the run that created it — that is the second run against any stand. So the plugin waits for whichever of a register prompt, a login prompt, or a session-resume message arrives, and acts on that. The register pattern is tested first, since AuthMe's register prompt mentions the password too and would otherwise look like a login prompt.
+
+A reconnect within AuthMe's own session timeout gets no prompt at all — AuthMe already considers the account logged in and says so via `sessionResumedPattern` instead. The plugin stops there without sending a command. Nothing matching within `timeoutMs` is treated as a genuine failure, not a stale session.
 
 ## Options
 
@@ -43,6 +45,7 @@ The server decides, not the account. `account.justCreated` is a hint from the ac
 | `registerPromptPattern` | `regist` | Regex identifying the register prompt |
 | `successPattern` | `success\|welcome\|logged in\|authenticat` | Regex confirming the command was accepted |
 | `authenticatedPattern` | `logged in\|authenticat` | Narrower regex confirming the player is actually authenticated |
+| `sessionResumedPattern` | `Session Reconnection` | Regex confirming AuthMe resumed the session on its own, no prompt needed |
 | `timeoutMs` | `15000` | How long to wait for each prompt or confirmation |
 | `password` | — | Fallback password for accounts that carry none |
 
