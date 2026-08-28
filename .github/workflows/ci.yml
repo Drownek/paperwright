@@ -18,10 +18,6 @@ jobs:
   test-example-plugin:
     if: "!contains(github.event.head_commit.message, 'skip-ci')"
     runs-on: ubuntu-latest
-    env:
-      # Test-only credentials for the Paper server this job starts and tears down itself.
-      PLUGWRIGHT_RCON_PASSWORD: plugwright
-      PLUGWRIGHT_BOT_PASSWORD: plugwright
 
     steps:
       - uses: actions/checkout@v4
@@ -36,17 +32,43 @@ jobs:
           java-version: "17"
           node-version: "24"
           working-directory: "./example_plugin"
-      # LocalMode's own server launch resolves a Java 21 toolchain (build.gradle.kts pins
-      # languageVersion 21 for Paper 1.21.11) regardless of the Gradle-daemon JDK above - Gradle
-      # downloads it on demand. start.sh has no such resolution, it just runs whatever "java" is
-      # on PATH, so put a real JDK 21 there before it needs one.
+
+  test-example-plugin-stand:
+    if: "!contains(github.event.head_commit.message, 'skip-ci')"
+    runs-on: ubuntu-latest
+    env:
+      # Test-only credentials for the Paper server this job starts and tears down itself.
+      PLUGWRIGHT_RCON_PASSWORD: plugwright
+      PLUGWRIGHT_BOT_PASSWORD: plugwright
+
+    steps:
+      - uses: actions/checkout@v4
+      # Same duplicated build as test-example-plugin: this job runs on its own runner, in
+      # parallel with it, so it can't share that job's npm install/build output.
+      - name: Build the local npm packages
+        run: |
+          npm run install:packages
+          npm run build:packages
+      # Running in parallel with test-example-plugin means this job can't reuse its
+      # generated/local/run/ either - provision the same Paper server here instead of just
+      # running plugwrightTest, which would also run (and duplicate) the local suite.
+      - uses: drownek/plugwright-action@v1
+        with:
+          java-version: "17"
+          node-version: "24"
+          working-directory: "./example_plugin"
+          gradle-args: plugwrightProvisionLocal
+      # The provisioning above resolves a Java 21 toolchain for itself (build.gradle.kts pins
+      # languageVersion 21 for Paper 1.21.11), but that's Gradle's own on-demand download, not
+      # something start.sh can reach - it just runs whatever "java" is on PATH, which
+      # plugwright-action pinned to 17 above for the Gradle daemon. Put a real JDK 21 there.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
-      # The LocalMode run above leaves Paper, cache and libraries under generated/local/run/ -
-      # stand reuses that same directory (build.gradle.kts points it at localhost:25565). Only
-      # start.sh is missing: generated/ is gitignored, so we copy in the tracked launcher.
+      # generated/ is gitignored, so start.sh - the launcher example_plugin/README.md tells
+      # developers to hand-write - never made it into the provisioned run dir. Copy in the
+      # tracked copy.
       - name: Start the stand Paper server
         working-directory: ./example_plugin/src/test/e2e/generated/local/run
         run: |
