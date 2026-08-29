@@ -18,6 +18,8 @@ jobs:
   test-example-plugin:
     if: "!contains(github.event.head_commit.message, 'skip-ci')"
     runs-on: ubuntu-latest
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +39,7 @@ jobs:
     if: "!contains(github.event.head_commit.message, 'skip-ci')"
     runs-on: ubuntu-latest
     env:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false"
       # Test-only credentials for the Paper server this job starts and tears down itself.
       PLUGWRIGHT_RCON_PASSWORD: plugwright
       PLUGWRIGHT_BOT_PASSWORD: plugwright
@@ -73,16 +76,12 @@ jobs:
           nohup ./start.sh > stand-server.log 2>&1 &
           echo $! > stand-server.pid
       - name: Wait for the stand server
+        working-directory: ./example_plugin/src/test/e2e/generated/local/run
+        timeout-minutes: 2
+        run: tail -n +1 -f stand-server.log | grep -q -m 1 'Done'
+      - name: Verify authentication (Ping)
         working-directory: ./example_plugin
-        run: |
-          for i in $(seq 1 30); do
-            if ./gradlew plugwrightPingStand; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "stand server did not come up in time" >&2
-          exit 1
+        run: ./gradlew plugwrightPingStand
       - name: Run the stand suite
         working-directory: ./example_plugin
         run: ./gradlew plugwrightTestStand
