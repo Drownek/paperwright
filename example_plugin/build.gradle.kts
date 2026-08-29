@@ -57,7 +57,10 @@ plugwright {
                 file("plugins/AuthMe/config.yml", """
                     settings:
                         sessions:
-                            enabled: false
+                            # On, so a bot that reconnects within the session timeout gets
+                            # resumed silently instead of prompted — the case the authme
+                            # plugin's sessionResumedPattern is built to detect.
+                            enabled: true
                         registration:
                             dialog:
                                 preJoin:
