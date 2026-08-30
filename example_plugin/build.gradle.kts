@@ -132,11 +132,9 @@ plugwright {
             // Matched against test names. What is left out here is what no command puts back:
             // an arena slot that is filled once and stays filled, and a first join, which only
             // happens on an account the server has never seen. Op, inventory, balance and kit
-            // cooldowns are reset per test by the stand-reset plugin instead. multi-bot and
-            // Cross-bot are out for a different reason — they name their second bot, and a named
-            // bot is not a pool account, so nothing knows its password.
+            // cooldowns are reset per test by the stand-reset plugin instead.
             excludeTests.set(listOf(
-                "arena", "first join", "multi-bot", "Cross-bot"
+                "arena", "first join"
             ))
         }
     }
