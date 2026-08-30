@@ -14,6 +14,11 @@ type TestFn = (context: TestContext) => Promise<void>;
 export interface TestOptions {
     requires?: string[];
     environments?: string[];
+    /** Runs this many independent instances of the test concurrently, each with its own bot
+     *  leased from the account pool, to exercise races between players hitting the same feature
+     *  at once. One failing instance fails the whole test. Defaults to 1 (sequential, no pool
+     *  requirement). Validated against the pool's capacity before any test runs. */
+    concurrency?: number;
 }
 
 interface DescribeScope {
@@ -32,6 +37,7 @@ export interface TestCase {
     afterHooks: Hook[];
     requires: string[];
     environments: string[] | null;
+    concurrency: number;
 }
 
 /** What a `describe.serial` block accepts beyond the usual filters. */
@@ -50,6 +56,7 @@ export interface SerialBlock {
     tests: TestCase[];
     requires: string[];
     environments: string[] | null;
+    concurrency: number;
 }
 
 export type RegistryItem =
@@ -82,7 +89,18 @@ function scopedEntry(name: string, options: TestOptions) {
         afterHooks: [...scopeStack].reverse().flatMap(s => s.afterHooks),
         requires: options.requires ?? [],
         environments: options.environments ?? null,
+        concurrency: normalizeConcurrency(options.concurrency),
     };
+}
+
+/** `concurrency` must be a whole number of at least 1 — anything else can't be turned into a
+ *  bot count. Checked at registration time so a typo fails on import, not mid-run. */
+function normalizeConcurrency(concurrency: number | undefined): number {
+    if (concurrency === undefined) return 1;
+    if (!Number.isInteger(concurrency) || concurrency < 1) {
+        throw new Error(`concurrency must be a whole number >= 1, got ${concurrency}`);
+    }
+    return concurrency;
 }
 
 function registerTest(name: string, options: TestOptions, fn: TestFn): void {
@@ -156,6 +174,7 @@ function serialImpl(label: string, optionsOrFn: SerialOptions | (() => void), ma
         tests: [],
         requires: options.requires ?? [],
         environments: options.environments ?? null,
+        concurrency: normalizeConcurrency(options.concurrency),
     };
 
     currentBlock = block;
