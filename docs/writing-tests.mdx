@@ -199,7 +199,7 @@ describe.serial('vip shop', { account: 'pw_0001' }, async () => {
 });
 ```
 
-The account must exist in the environment's `accounts { }` pool and be free. If it is already leased, or the environment has no pool at all (`local` invents a name per bot and has none), the block fails with that message rather than quietly running as somebody else.
+The account must exist in the environment's `accounts { }` pool and be free. If it is already leased, or the environment has no pool at all (`LocalMode` invents a name per bot and has none), the block fails with that message rather than quietly running as somebody else.
 
 ### A second bot for the block
 
@@ -221,6 +221,40 @@ describe.serial('trading', () => {
 });
 ```
 
+## Racing bots against each other: `concurrency`
+
+One bot can't produce a race. Two players opening the same chest at once, three players buying the last item in stock — bugs like that only exist when several bots hit the same feature at the same time, on the same server. `concurrency` runs a test as N independent instances at once, each with its own bot:
+
+```typescript
+test('only one player can claim the chest', { concurrency: 3 }, async ({ player }) => {
+  player.chat('/claim');
+  await expect(player).toHaveReceivedMessage(/Claimed|already claimed/);
+});
+```
+
+Each instance leases its own account and runs the full test body on its own bot. The test only passes if every instance does — one instance losing the race it wasn't supposed to lose is the bug you're trying to catch, not noise to average away.
+
+`describe.serial` blocks take the same option, running N independent copies of the whole ordered chain at once:
+
+```typescript
+describe.serial('kit lifecycle', { concurrency: 5 }, () => {
+  test('claims the starter kit', async ({ player }) => { /* ... */ });
+  test('is on cooldown right after', async ({ player }) => { /* ... */ });
+});
+```
+
+### The report still has one row per test
+
+`concurrency` multiplies how many bots run a test, not how many rows it produces in the summary. That row's duration is the slowest instance, and it carries an `instances` array with every instance's own outcome — bot username, pass or fail, duration — so a failure tells you which bot lost, not just that somebody did.
+
+### How many you can ask for
+
+`concurrency: N` needs N free accounts. On an environment with an account pool, this is checked before any test in the run starts: ask for `concurrency: 10` against a 4-account pool and it fails immediately with a clear error, instead of the 5th bot hanging on a lease nobody's going to release. `LocalMode` has no pool — it mints a throwaway account per bot — so there's nothing to check there; its only real ceiling is the server's own `max-players`.
+
+### The server log is still one shared log
+
+`expect(server)` reads the console output the whole session shares, so one instance's commands sit in that log right next to every other instance's. Nothing filters that for you, and that's deliberate — asserting the server log never produced something no bot should have caused (`expect(server).not.toHaveReceivedMessage('NullPointerException')`) is exactly what a concurrency test is for. If you need one bot's output specifically, either put its username in the pattern or check `expect(player)` instead, since a player's own messages never mix with another bot's.
+
 ## Best Practices
 
 1. **Keep tests isolated** - Each test gets a fresh bot unless it is in a `describe.serial` block
@@ -232,7 +266,7 @@ describe.serial('trading', () => {
 
 ## Tips
 
-- Tests run sequentially, not in parallel
+- Tests run sequentially by default — a test that needs bots racing each other can opt into `concurrency`
 - Server starts fresh for each test run
 - Bot automatically connects to the server
 - Server logs are visible in the console output
