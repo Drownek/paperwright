@@ -34,10 +34,12 @@ export interface RunSerialBlockParams {
 /** Bots created while one test, or one `describe.serial` block, is running: who leased what,
  *  which player answers to which `as` name, and how to give it all back. */
 interface BotScope {
-    connect(options?: { username?: string; account?: string }): Promise<PlayerWrapper>;
+    connect(options?: { username?: string; account?: string; password?: string }): Promise<PlayerWrapper>;
     /** `ctx.createPlayer`. `as` names the player so a later call — a later test, inside a block —
-     *  gets the same bot back instead of connecting a second one. */
-    createPlayer(options?: { username?: string; as?: string }): Promise<PlayerWrapper>;
+     *  gets the same bot back instead of connecting a second one. `password` belongs with
+     *  `username`: a named bot is not a pool account, so the test is the only thing that can
+     *  say how it logs in. */
+    createPlayer(options?: { username?: string; as?: string; password?: string }): Promise<PlayerWrapper>;
     /** Every player connected in this scope, in the order they joined. */
     players(): PlayerWrapper[];
     /** Disconnects every bot in the scope and returns the accounts they held. */
@@ -49,7 +51,7 @@ function createBotScope(session: Session, server: ServerWrapper, connOpts: BotCo
     const named = new Map<string, PlayerWrapper>();
     const connected: PlayerWrapper[] = [];
 
-    const connect = async (options?: { username?: string; account?: string }): Promise<PlayerWrapper> => {
+    const connect = async (options?: { username?: string; account?: string; password?: string }): Promise<PlayerWrapper> => {
         const pool = options?.username ? null : session.env.accounts?.() ?? null;
         if (options?.account && !pool) {
             throw new Error(
@@ -57,9 +59,17 @@ function createBotScope(session: Session, server: ServerWrapper, connOpts: BotCo
                 'to take it from — a named account needs one the build script declares.'
             );
         }
+        // A pooled account brings its own password, so a password with no username would be
+        // read by nothing. Say so rather than connect as somebody else's account and ignore it.
+        if (options?.password && pool) {
+            throw new Error(
+                `a password was passed without a username, but environment "${session.env.id}" leases its ` +
+                'accounts from a pool and those carry their own. Name the bot too, or drop the password.'
+            );
+        }
         const account: Account = pool
             ? await pool.lease(options?.account)
-            : syntheticAccount(options?.username || `pw_${randomSuffix()}`);
+            : syntheticAccount(options?.username || `pw_${randomSuffix()}`, options?.password);
 
         try {
             const botUsername = account.username;
@@ -97,7 +107,7 @@ function createBotScope(session: Session, server: ServerWrapper, connOpts: BotCo
                 const existing = named.get(handle);
                 if (existing) return existing;
             }
-            const player = await connect({ username: options?.username });
+            const player = await connect({ username: options?.username, password: options?.password });
             if (handle) named.set(handle, player);
             return player;
         },

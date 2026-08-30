@@ -85,10 +85,12 @@ One account is leased per bot and returned in a `finally`, whatever the test did
 An explicitly named bot bypasses the pool entirely:
 
 ```ts
-const friend = await createPlayer({ username: 'FriendBot' });
+const friend = await createPlayer({ username: 'FriendBot', password: process.env.FRIEND_BOT_PASSWORD });
 ```
 
-That is a request for a specific identity, not for whatever is free — so nothing knows its password. On a stand behind a login wall, either leave those tests to the local environment or give the account a password some other way.
+That is a request for a specific identity, not for whatever is free, so the pool knows nothing about it and neither does your authentication plugin. Pass the password with the name. Read it from the environment; the spec file goes to git.
+
+Most second bots don't need this. A test that just wants another player should call `createPlayer()` with no arguments and let the pool answer — a name is worth asking for when the identity is, because somebody provisioned that account with a permission group or a balance, or because the name came from somewhere outside the test.
 
 <Warning>
 A leased account comes back with the previous test's inventory, balance and op status. Nothing resets it for you. Reset what you can in a plugin's `beforeEach`, exclude what you can't, and treat `capabilities.freshState = false` as the honest description it is.

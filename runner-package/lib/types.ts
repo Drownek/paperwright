@@ -6,8 +6,12 @@ export interface TestContext {
     server: ServerWrapper;
     /** Connects an extra bot. Inside a `describe.serial` block, `as` names it: the same name in
      *  a later test of that block returns the same bot instead of connecting another. Outside a
-     *  block the name is scoped to the one test, which is as long as the bot lives anyway. */
-    createPlayer: (options?: { username?: string; as?: string }) => Promise<PlayerWrapper>;
+     *  block the name is scoped to the one test, which is as long as the bot lives anyway.
+     *
+     *  `username` asks for one specific identity instead of whatever the pool has free, and
+     *  `password` is what an authentication plugin logs that identity in with. Read it from the
+     *  environment rather than writing it in the spec — spec files go to git. */
+    createPlayer: (options?: { username?: string; as?: string; password?: string }) => Promise<PlayerWrapper>;
     /** Says the player is in a state the tests after this one were not written for. Inside a
      *  `describe.serial` block that stops the block: the rest is reported skipped. Outside one
      *  it does nothing — the bot is disconnected at the end of the test either way. */
