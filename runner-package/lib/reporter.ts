@@ -65,7 +65,12 @@ export function printTestSummary(testResults: TestResult[]): number {
                 ? pc.yellow(pc.bold(statusPadded))
                 : pc.red(pc.bold(statusPadded));
         const duration = formatDuration(result.durationMs);
-        console.log(`  ${coloredStatus}  ${result.testName.padEnd(testWidth)}  ${pc.dim(duration.padStart(durationWidth))}`);
+        // A concurrent test/block's row is one aggregate over N instances — say how many
+        // passed right in the table, not just in the failed-tests detail below.
+        const instanceTag = result.instances
+            ? pc.dim(` [${result.instances.filter(i => i.passed).length}/${result.instances.length}]`)
+            : '';
+        console.log(`  ${coloredStatus}  ${result.testName.padEnd(testWidth)}  ${pc.dim(duration.padStart(durationWidth))}${instanceTag}`);
     }
 
     console.log(separator);
@@ -97,10 +102,11 @@ export function printTestSummary(testResults: TestResult[]): number {
                 const { min, avg, max } = instanceStats(result.instances);
                 console.log(`    ${pc.dim(`${result.instances.length} instances: min ${formatDuration(min)} / avg ${formatDuration(avg)} / max ${formatDuration(max)}`)}`);
                 for (const instance of result.instances) {
+                    const tag = `[${instance.index}/${result.instances.length}]`;
                     const label = instance.botUsername ?? '?';
                     const status = instance.passed ? pc.green('OK') : pc.red('FAIL');
                     const detail = instance.error ? pc.red(` ${instance.error.message}`) : '';
-                    console.log(`      ${pc.dim(`- ${label}:`)} ${status} ${pc.dim(`(${formatDuration(instance.durationMs)})`)}${detail}`);
+                    console.log(`      ${pc.dim(`- ${tag} ${label}:`)} ${status} ${pc.dim(`(${formatDuration(instance.durationMs)})`)}${detail}`);
                 }
             }
 
@@ -152,6 +158,7 @@ export function writeJsonReport(path: string, environmentName: string, testResul
             // own outcome, so a failure names which bot lost the race instead of just that one did.
             instances: r.instances
                 ? r.instances.map(i => ({
+                    index: i.index,
                     botUsername: i.botUsername ?? null,
                     passed: i.passed,
                     durationMs: i.durationMs,

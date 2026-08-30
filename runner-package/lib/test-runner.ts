@@ -415,7 +415,8 @@ function aggregateInstances(results: TestResult[]): TestResult {
         error: failed?.error,
         skipped: !failed && allSkipped,
         skipReason: !failed && allSkipped ? first.skipReason : undefined,
-        instances: results.map(r => ({
+        instances: results.map((r, i) => ({
+            index: i + 1,
             botUsername: r.botUsername,
             passed: r.passed,
             durationMs: r.durationMs,

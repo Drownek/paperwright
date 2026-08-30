@@ -21,6 +21,9 @@ export interface TestContext {
 /** One concurrent instance's own outcome, rolled up into the `instances` array of the
  *  aggregate `TestResult` for a `concurrency > 1` test/block. */
 export interface TestInstanceResult {
+    /** 1-based position among the N concurrent instances — matches the `[i/N]` tag in the
+     *  console log for this same run. */
+    index: number;
     botUsername?: string;
     passed: boolean;
     durationMs: number;

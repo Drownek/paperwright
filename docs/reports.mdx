@@ -61,9 +61,9 @@ A test (or block) run with [`concurrency`](/writing-tests) still gets one entry,
   "plugin": null,
   "botUsername": null,
   "instances": [
-    { "botUsername": "pw_a1", "passed": true, "durationMs": 640, "error": null },
-    { "botUsername": "pw_b2", "passed": false, "durationMs": 812, "error": "Expected message matching \"Claimed\" not received" },
-    { "botUsername": "pw_c3", "passed": true, "durationMs": 701, "error": null }
+    { "index": 1, "botUsername": "pw_a1", "passed": true, "durationMs": 640, "error": null },
+    { "index": 2, "botUsername": "pw_b2", "passed": false, "durationMs": 812, "error": "Expected message matching \"Claimed\" not received" },
+    { "index": 3, "botUsername": "pw_c3", "passed": true, "durationMs": 701, "error": null }
   ]
 }
 ```
