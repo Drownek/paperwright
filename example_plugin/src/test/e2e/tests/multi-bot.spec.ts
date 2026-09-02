@@ -10,8 +10,9 @@ test('multi-bot teleportation', async ({ player, createPlayer }) => {
     // This can be also done with defining test as `opTest` instead of `test` or even within `beforeEach` block.
     await player.makeOp();
 
-    // Spawn a second player
-    const friend = await createPlayer({ username: 'FriendBot' });
+    // Spawn a second player. No username: the test needs a second bot, not a specific one,
+    // so on a stand this leases the next free pool account instead of bypassing the pool.
+    const friend = await createPlayer();
 
     // Teleport the friend to a specific location
     // We wait for friend player to actually teleport.

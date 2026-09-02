@@ -19,9 +19,13 @@ export interface Account {
 /**
  * Stand-in used when an environment has no [AccountPool] of its own — a `local` bot is a
  * fresh offline-mode connection under a name the server has never seen.
+ *
+ * [password] is for the other case: a bot the test names itself. That bypasses the pool, so
+ * nothing else knows a password for it, and the test has to bring one for the authentication
+ * plugin to use.
  */
-export function syntheticAccount(username: string): Account {
-    return { username, auth: 'offline', justCreated: true };
+export function syntheticAccount(username: string, password?: string): Account {
+    return { username, password, auth: 'offline', justCreated: true };
 }
 
 /** A short random identity suffix. Four hex digits: long enough that two names in a run
