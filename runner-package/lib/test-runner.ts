@@ -1,4 +1,5 @@
 import pc from 'picocolors';
+import type { Bot } from 'mineflayer';
 import { PlayerWrapper } from './player.js';
 import { ServerWrapper } from './server.js';
 import { formatDuration } from './reporter.js';
@@ -63,6 +64,10 @@ function createBotScope(session: Session, server: ServerWrapper, connOpts: BotCo
     const leased: Array<{ account: Account; pool: AccountPool }> = [];
     const named = new Map<string, PlayerWrapper>();
     const connected: PlayerWrapper[] = [];
+    // Every bot this scope created, whether or not `player.join()` went on to succeed — unlike
+    // `connected`, which only gains an entry after a successful join. `close()` needs this one:
+    // a bot whose join failed still opened a real connection and must still be torn down.
+    const ownBots: Bot[] = [];
 
     const connect = async (options?: { username?: string; account?: string }): Promise<PlayerWrapper> => {
         const pool = options?.username ? null : session.env.accounts?.() ?? null;
@@ -88,6 +93,7 @@ function createBotScope(session: Session, server: ServerWrapper, connOpts: BotCo
                 profilesFolder: account.microsoftCacheDir,
             };
             const bot = session.createBot({ ...botOptions, username: botUsername });
+            ownBots.push(bot);
             const player = new PlayerWrapper(bot, session);
             player._captureSpawnPromise();
             player.setServerWrapper(server);
@@ -119,13 +125,17 @@ function createBotScope(session: Session, server: ServerWrapper, connOpts: BotCo
         players: () => [...connected],
         async close(): Promise<void> {
             // Only this scope's own bots — a concurrent sibling instance's bots are still
-            // running and must not be torn down by this one finishing first.
-            const ownBots = new Set(connected.map(p => p.bot));
-            await session.disconnectAllBots(session.bots.filter(b => !ownBots.has(b)));
+            // running and must not be torn down by this one finishing first. Uses `ownBots`
+            // (everything this scope ever created), not `connected`, so a bot whose join()
+            // failed and never made it into `connected` still gets torn down here instead of
+            // leaking an open connection forever.
+            const ownBotsSet = new Set(ownBots);
+            await session.disconnectAllBots(session.bots.filter(b => !ownBotsSet.has(b)));
             for (const { account, pool } of leased) pool.release(account);
             leased.length = 0;
             named.clear();
             connected.length = 0;
+            ownBots.length = 0;
         },
     };
 }
