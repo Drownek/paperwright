@@ -7,7 +7,7 @@ import { ItemWrapper, GuiWrapper, LiveGuiHandle, GuiItemLocator } from './lib/wr
 import { testRegistry, resetRegistry } from './lib/test-registry.js';
 import { Session } from './lib/session.js';
 import { PluginHost } from './lib/plugin-host.js';
-import { runSerialBlock, runTestCase } from './lib/test-runner.js';
+import { runSerialBlock, runTestCase, runConcurrentSerialBlock, runConcurrentTestCase } from './lib/test-runner.js';
 import { skipReasonForOptions } from './lib/skip-reason.js';
 import { LocalEnvironment } from './lib/environments/local.js';
 import { externalEnvironment } from './lib/environments/external.js';
@@ -19,7 +19,7 @@ import type { Environment } from './lib/environment.js';
 import type { EnvironmentConfig, LocalEnvironmentConfig, RunnerConfig } from './lib/config.js';
 import type { ExternalEnvironmentConfig } from './lib/environments/external.js';
 import type { TestResult } from './lib/types.js';
-import type { SerialBlock, TestCase } from './lib/test-registry.js';
+import type { SerialBlock, TestCase, RegistryItem } from './lib/test-registry.js';
 import type { Account, AccountPool } from './lib/account.js';
 
 // Enable source map support for accurate TypeScript stack traces
@@ -147,14 +147,54 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
             return null;
         }
 
-        /** Imports one compiled spec file (a fresh `testRegistry`) and runs everything it
-         *  registered, appending results to `testResults`. Shared by user specs and every
-         *  plugin-inherited test file. */
-        async function runFile(file: string, pluginName: string | null): Promise<void> {
+        /** One imported spec file's registered tests, snapshotted right after import so its
+         *  concurrency values can be validated before any file's tests run — re-importing later
+         *  to re-check wouldn't work anyway: ESM caches the module, so a second `import()` of
+         *  the same file wouldn't re-run its top-level `test()`/`describe()` calls. */
+        interface LoadedFile {
+            file: string;
+            pluginName: string | null;
+            items: RegistryItem[];
+        }
+
+        async function loadFile(file: string, pluginName: string | null): Promise<LoadedFile> {
             resetRegistry();
             await import(pathToFileURL(file).href);
+            return { file, pluginName, items: [...testRegistry] };
+        }
 
-            for (const item of testRegistry) {
+        /** Fails fast, before any test in the session runs, on a `concurrency` the account pool
+         *  here can't satisfy — rather than the test itself blocking on its Nth `pool.lease()`. An
+         *  environment with no pool (e.g. `LocalMode`) mints a synthetic throwaway account per
+         *  connection instead of leasing one, so there's no pool capacity to check against; its
+         *  ceiling is the server's own `max-players`, which is on the operator, not this check. */
+        function validateConcurrency(loaded: LoadedFile[]): void {
+            const pool = env.accounts?.() ?? null;
+            if (!pool) return;
+            const capacity = pool.capacity();
+
+            for (const { file, items } of loaded) {
+                for (const item of items) {
+                    const [kind, name, concurrency] = item.kind === 'serial'
+                        ? ['describe.serial', item.block.name, item.block.concurrency] as const
+                        : ['test', item.testCase.name, item.testCase.concurrency] as const;
+                    if (concurrency <= 1) continue;
+                    if (concurrency > capacity) {
+                        throw new Error(
+                            `${kind} "${name}" (${file}) declares concurrency: ${concurrency}, exceeding the ` +
+                            `account pool's capacity (${capacity}). Reduce concurrency or grow the pool.`
+                        );
+                    }
+                }
+            }
+        }
+
+        /** Runs everything one loaded file registered, appending results to `testResults`.
+         *  Shared by user specs and every plugin-inherited test file. */
+        async function runLoadedFile(loaded: LoadedFile): Promise<void> {
+            const { file, pluginName, items } = loaded;
+
+            for (const item of items) {
                 if (item.kind === 'serial') {
                     const { block } = item;
                     const skipReason = blockSkipReason(block);
@@ -166,7 +206,10 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
                         continue;
                     }
 
-                    testResults.push(...await runSerialBlock({ file, block, session, plugins, connOpts, timeoutMs, pluginName }));
+                    const results = block.concurrency > 1
+                        ? await runConcurrentSerialBlock({ file, block, session, plugins, connOpts, timeoutMs, pluginName, concurrency: block.concurrency })
+                        : await runSerialBlock({ file, block, session, plugins, connOpts, timeoutMs, pluginName });
+                    testResults.push(...results);
                     continue;
                 }
 
@@ -178,20 +221,31 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
                     continue;
                 }
 
-                const result = await runTestCase({ file, testCase, session, plugins, connOpts, timeoutMs, pluginName });
+                const result = testCase.concurrency > 1
+                    ? await runConcurrentTestCase({ file, testCase, session, plugins, connOpts, timeoutMs, pluginName, concurrency: testCase.concurrency })
+                    : await runTestCase({ file, testCase, session, plugins, connOpts, timeoutMs, pluginName });
                 testResults.push(result);
             }
         }
 
+        const preflightEntries = [...plugins.testFiles('preflight')];
+        const loadedPreflight: LoadedFile[] = [];
+        for (const { file, pluginName } of preflightEntries) loadedPreflight.push(await loadFile(file, pluginName));
+
+        // Preflight files are loaded and validated on their own, before any main/suite spec
+        // file is imported — importing those here would run their top-level code ahead of
+        // preflight, against whatever state preflight was going to set up during execution.
+        validateConcurrency(loadedPreflight);
+
         // Preflight: plugin auth/setup tests, run before anything else. A failure aborts the
         // whole session.
-        for (const { file, pluginName } of plugins.testFiles('preflight')) {
-            console.log(`\n${pc.blue(pc.bold(`Running preflight tests from: ${file} ${pc.dim(`(plugin ${pluginName})`)}`))}`);
+        for (const loaded of loadedPreflight) {
+            console.log(`\n${pc.blue(pc.bold(`Running preflight tests from: ${loaded.file} ${pc.dim(`(plugin ${loaded.pluginName})`)}`))}`);
             const before = testResults.length;
-            await runFile(file, pluginName);
+            await runLoadedFile(loaded);
             const failed = testResults.slice(before).find(r => !r.skipped && !r.passed);
             if (failed) {
-                throw new Error(`Preflight test "${failed.testName}" failed (plugin ${pluginName}): ${failed.error?.message ?? 'unknown error'}`);
+                throw new Error(`Preflight test "${failed.testName}" failed (plugin ${loaded.pluginName}): ${failed.error?.message ?? 'unknown error'}`);
             }
         }
 
@@ -208,18 +262,30 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
                 })
             );
         }
+        const loadedMain: LoadedFile[] = [];
+        for (const file of testFiles) loadedMain.push(await loadFile(file, null));
 
-        console.log(`${pc.bold(`Found ${testFiles.length} test file(s)${testFileFilters ? ` matching filter: ${testFileFilters.join(',')}` : ''}`)}\n`);
+        const suiteEntries = [...plugins.testFiles('suite')];
+        const loadedSuite: LoadedFile[] = [];
+        for (const { file, pluginName } of suiteEntries) loadedSuite.push(await loadFile(file, pluginName));
 
-        for (const file of testFiles) {
-            console.log(`\n${pc.blue(pc.bold(`Running tests from: ${file}`))}`);
-            await runFile(file, null);
+        // Main and suite files are loaded (imported once, registrations snapshotted) before any
+        // of them runs, so a misconfigured `concurrency` aborts here instead of after burning
+        // time on earlier tests. Preflight has already run by this point, so this no longer
+        // imports them ahead of the state preflight sets up.
+        validateConcurrency([...loadedMain, ...loadedSuite]);
+
+        console.log(`${pc.bold(`Found ${loadedMain.length} test file(s)${testFileFilters ? ` matching filter: ${testFileFilters.join(',')}` : ''}`)}\n`);
+
+        for (const loaded of loadedMain) {
+            console.log(`\n${pc.blue(pc.bold(`Running tests from: ${loaded.file}`))}`);
+            await runLoadedFile(loaded);
         }
 
         // Suite: plugin tests that run alongside user specs, tagged with the plugin's name.
-        for (const { file, pluginName } of plugins.testFiles('suite')) {
-            console.log(`\n${pc.blue(pc.bold(`Running tests from: ${file} ${pc.dim(`(plugin ${pluginName})`)}`))}`);
-            await runFile(file, pluginName);
+        for (const loaded of loadedSuite) {
+            console.log(`\n${pc.blue(pc.bold(`Running tests from: ${loaded.file} ${pc.dim(`(plugin ${loaded.pluginName})`)}`))}`);
+            await runLoadedFile(loaded);
         }
 
     } finally {

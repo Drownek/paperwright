@@ -168,19 +168,25 @@ export class Session {
      *
      *  Each bot goes through `disconnectBot`, which is also what strips its listeners: a kept
      *  bot is still connected and still listening, so tearing the others down must not be a
-     *  second implementation that forgets to. */
+     *  second implementation that forgets to.
+     *
+     *  Snapshots which bots to disconnect before the `await`, then removes exactly those from
+     *  `this.bots` afterward — not "whatever isn't in `keep`" recomputed after the fact. A
+     *  concurrent caller can push a new bot onto `this.bots` while this call is awaiting; that
+     *  bot is in neither snapshot, so it survives here untouched instead of being silently
+     *  dropped from tracking without ever being disconnected. */
     async disconnectAllBots(keep: Bot[] = []): Promise<void> {
         const keepSet = new Set(keep);
+        const toDisconnect = this.bots.filter(b => !keepSet.has(b));
 
         await Promise.all(
-            this.bots
-                .filter(b => !keepSet.has(b))
-                .map((b, i) => this.disconnectBot(b, b.username ?? `bot-${i}`, 2000))
+            toDisconnect.map((b, i) => this.disconnectBot(b, b.username ?? `bot-${i}`, 2000))
         );
 
-        const remaining = this.bots.filter(b => keepSet.has(b));
-        this.bots.length = 0;
-        this.bots.push(...remaining);
+        const disconnectedSet = new Set(toDisconnect);
+        for (let i = this.bots.length - 1; i >= 0; i--) {
+            if (disconnectedSet.has(this.bots[i])) this.bots.splice(i, 1);
+        }
     }
 
     /** Feeds raw environment output (e.g. Minecraft server stdout/stderr) into the console log buffer. */

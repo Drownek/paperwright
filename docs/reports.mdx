@@ -40,11 +40,35 @@ build/reports/plugwright/<env>.log         per-environment output, matrix runs o
 }
 ```
 
-`status` is `pass`, `fail` or `skip`. `plugin` names the plugin a test came from when it was inherited rather than found in your test directory.
+`status` is `pass`, `fail` or `skip`. `plugin` names the plugin a test came from when it was inherited rather than found in your test directory. `botUsername` is the bot that ran it, when one connected.
 
 Every skip carries its reason: excluded by name, wrong environment, a capability the environment doesn't have, or an earlier test in the same [`describe.serial`](/writing-tests) block that stopped the chain. A skipped test that doesn't say why is worse than a failing one, because it reads as coverage.
 
 Tests from a serial block appear as ordinary entries, in the order they ran, under their full `describe` path.
+
+## Concurrent tests
+
+A test (or block) run with [`concurrency`](/writing-tests) still gets one entry, not N. `durationMs` is the slowest instance, and `instances` carries every instance's own outcome:
+
+```json
+{
+  "file": "…/dist/claim.spec.js",
+  "name": "only one player can claim the chest",
+  "status": "fail",
+  "durationMs": 812,
+  "error": "Expected message matching \"Claimed\" not received",
+  "skipReason": null,
+  "plugin": null,
+  "botUsername": null,
+  "instances": [
+    { "index": 1, "botUsername": "pw_a1", "passed": true, "durationMs": 640, "error": null },
+    { "index": 2, "botUsername": "pw_b2", "passed": false, "durationMs": 812, "error": "Expected message matching \"Claimed\" not received" },
+    { "index": 3, "botUsername": "pw_c3", "passed": true, "durationMs": 701, "error": null }
+  ]
+}
+```
+
+`instances` is `null` for an ordinary, non-concurrent test — `botUsername` on the row itself is where its bot lives instead. The JUnit report doesn't carry this breakdown; it only ever sees the one aggregated pass/fail/duration, so read the JSON report when a concurrent test fails.
 
 ## JUnit XML
 

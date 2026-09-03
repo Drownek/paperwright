@@ -87,11 +87,13 @@ export class RunnerMatchers<T = unknown> extends Matchers<T> {
 
         // A player's messages are its own (see `PlayerWrapper.messageBuffer`) so one bot's chat
         // never satisfies an assertion made against another; the server log has no such split,
-        // it's one console shared by the whole session.
+        // it's one console shared by the whole session — and never cleared, so a test that
+        // doesn't pass `since` defaults to its own `ServerWrapper.startIndex` instead of 0.
         const buffer = this.actual instanceof PlayerWrapper
             ? this.actual.messageBuffer
             : session.consoleLog;
-        const view = (): string[] => buffer.slice(since);
+        const effectiveSince = since ?? (this.actual instanceof PlayerWrapper ? undefined : this.actual.startIndex);
+        const view = (): string[] => buffer.slice(effectiveSince);
 
         await this.pollAssertion(
             () => view().some(isMatch),

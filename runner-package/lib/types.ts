@@ -22,6 +22,18 @@ export interface TestContext {
     cleanup: (fn: () => void | Promise<void>) => void;
 }
 
+/** One concurrent instance's own outcome, rolled up into the `instances` array of the
+ *  aggregate `TestResult` for a `concurrency > 1` test/block. */
+export interface TestInstanceResult {
+    /** 1-based position among the N concurrent instances — matches the `[i/N]` tag in the
+     *  console log for this same run. */
+    index: number;
+    botUsername?: string;
+    passed: boolean;
+    durationMs: number;
+    error?: Error;
+}
+
 export interface TestResult {
     file: string;
     testName: string;
@@ -34,4 +46,10 @@ export interface TestResult {
     skipReason?: string;
     /** Name of the plugin this test was inherited from, or null for a user spec. */
     plugin?: string | null;
+    /** The bot that ran this test, when one connected. Absent for a skip, or a test that failed
+     *  before it got as far as leasing a bot. */
+    botUsername?: string;
+    /** Set when this result aggregates `concurrency > 1` concurrent instances: `passed` is AND
+     *  across all of them, `durationMs` is the slowest, `error` is the first failure. */
+    instances?: TestInstanceResult[];
 }
