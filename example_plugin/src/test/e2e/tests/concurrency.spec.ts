@@ -12,16 +12,20 @@
 
 import { describe, expect, test } from '@plugwright/runner';
 
-test('concurrent bots each see their own marker and stay connected', { concurrency: 3, requires: ['consoleOutput:full'] }, async ({ player, server }) => {
-    const marker = `concurrency-marker-${player.username}`;
-    player.chat(`/say ${marker}`);
-    await expect(server).toHaveReceivedMessage(marker, { timeout: 10000 });
+test(
+    'concurrent bots each see their own marker and stay connected',
+    { concurrency: 3, requires: ['consoleOutput:full'] },
+    async ({ player, server }) => {
+        const marker = `concurrency-marker-${player.username}`;
+        player.chat(marker);
+        await expect(server).toHaveReceivedMessage(marker, { timeout: 10000 });
 
-    // Still connected: an earlier-finishing sibling instance's teardown must not have
-    // disconnected this one.
-    await player.teleport(50, 100, 50);
-    await expect(player).toBeNear(50, 100, 50, { tolerance: 2, timeout: 10000 });
-});
+        // Still connected: an earlier-finishing sibling instance's teardown must not have
+        // disconnected this one.
+        await player.teleport(50, 100, 50);
+        await expect(player).toBeNear(50, 100, 50, { tolerance: 2, timeout: 10000 });
+    }
+);
 
 describe.serial('concurrent kit lifecycle', { concurrency: 2 }, () => {
     test('claims the starter kit', async ({ player }) => {
