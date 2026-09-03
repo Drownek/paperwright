@@ -106,6 +106,16 @@ function normalizeConcurrency(concurrency: number | undefined): number {
 function registerTest(name: string, options: TestOptions, fn: TestFn): void {
     const testCase = { ...scopedEntry(name, options), fn };
     if (currentBlock) {
+        // A serial block always runs its tests one after another on the same player — fanning
+        // one of them out into concurrent instances makes no sense and would otherwise be
+        // silently ignored (the block runner never reads a per-test concurrency), leaving
+        // whoever set it wondering why nothing ran concurrently.
+        if (testCase.concurrency > 1) {
+            throw new Error(
+                `test "${name}": concurrency is not supported on tests inside describe.serial ` +
+                `(block "${currentBlock.name}") — set concurrency on the describe.serial block itself instead.`
+            );
+        }
         currentBlock.tests.push(testCase);
     } else {
         testRegistry.push({ kind: 'test', testCase });
