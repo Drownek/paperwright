@@ -183,18 +183,6 @@ jobs:
       - uses: drownek/plugwright-action@v1
 ```
 
-## Publishing
-
-Releasing Plugwright itself is two commands — `npm run publish:packages` for the npm
-packages and `./gradlew publishToPublicRepository` for the gradle plugin. Both go to their
-public homes, npmjs.com and the Gradle Plugin Portal, and tagging a commit `v*` runs them
-for you.
-
-The same two commands publish to a registry of your own instead, for an organisation whose
-builds cannot reach the public ones. The URL and its credentials come from the environment
-rather than from any file in the repository — see [`.env.example`](.env.example) and the
-[publishing guide](https://plugwright.dev/publishing).
-
 ## Used in Production
 
 <a href="https://holyworld.io/">
