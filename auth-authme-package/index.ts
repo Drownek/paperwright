@@ -38,6 +38,14 @@ export interface AuthAuthmeOptions {
      *  values, so only use this where the password is worth nothing: a local, disposable
      *  server. Anywhere else, put the accounts in the pool and let the password be a secret. */
     password?: string;
+    /** Skip the login/register handshake entirely for `microsoft` (online-mode) accounts.
+     *  Off by default: whether AuthMe still puts up its login wall for a premium account is a
+     *  server-side setting (e.g. AuthMe's premium auto-login), not something this plugin can
+     *  assume — see issue #65, where a `microsoft` account was prompted to `/register` like
+     *  any other. Only set this once you've confirmed your server really does let Microsoft
+     *  accounts straight through. Plugin options travel as strings from the Kotlin DSL, so set
+     *  it as `options["skipOnMicrosoftAccount"] = "true"`. */
+    skipOnMicrosoftAccount?: boolean;
 }
 
 const DEFAULTS: Required<Omit<AuthAuthmeOptions, 'password'>> = {
@@ -49,12 +57,19 @@ const DEFAULTS: Required<Omit<AuthAuthmeOptions, 'password'>> = {
     authenticatedPattern: 'success(ful)? login|logged in|authenticat',
     timeoutMs: 15000,
     sessionResumedPattern: 'Session Reconnection',
+    skipOnMicrosoftAccount: false,
 };
 
 // `onPlayerCreate` doesn't receive the plugin's options — only `setup()` does — so the
 // resolved settings live here, captured once when the session starts. Safe because a runner
 // process only ever runs one session at a time (see Session's own module-level caveats).
 let resolved: Required<Omit<AuthAuthmeOptions, 'password'>> & { password?: string } = DEFAULTS;
+
+// Kotlin's `options[k] = v` map is string-only (see PluginRefSpec), so a boolean option set
+// through the Gradle DSL arrives here as the literal string "true"/"false", not a real
+// boolean — a plain truthy check would treat "false" as on. Anything already boolean (options
+// set from a JS/TS environment config directly) passes through unchanged.
+const isEnabled = (value: boolean | string): boolean => value === true || value === 'true';
 
 /**
  * Reference authentication plugin for a server running AuthMe (or anything with the same
@@ -72,15 +87,21 @@ export default definePlugin<AuthAuthmeOptions>({
     },
 
     async onPlayerCreate(player, { account }) {
-        // Online-mode (Microsoft) accounts never see AuthMe's offline-mode login wall.
-        if (account.auth === 'microsoft') return;
+        // Opt-in only: whether AuthMe skips its login wall for a premium account depends on
+        // server config, not on the account being `microsoft` (issue #65).
+        if (account.auth === 'microsoft' && isEnabled(resolved.skipOnMicrosoftAccount)) return;
 
         const password = account.password ?? resolved.password;
         if (!password) {
             throw new Error(
-                `authme: account "${account.username}" has no password to log in with. ` +
-                'Give the environment an accounts pool, or set the plugin\'s "password" option ' +
-                'for a throwaway local server.'
+                account.auth === 'microsoft'
+                    ? `authme: microsoft account "${account.username}" has no password to log in with. ` +
+                      'Microsoft accounts never carry one (mineflayer authenticates them itself), so set ' +
+                      'the plugin\'s "password" option, or set "skipOnMicrosoftAccount" if your server ' +
+                      'really doesn\'t put up a login wall for premium accounts.'
+                    : `authme: account "${account.username}" has no password to log in with. ` +
+                      'Give the environment an accounts pool, or set the plugin\'s "password" option ' +
+                      'for a throwaway local server.'
             );
         }
 

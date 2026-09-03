@@ -63,7 +63,8 @@ import { definePlugin, poll } from '@plugwright/runner';
 export default definePlugin({
     name: 'authme',
     async onPlayerCreate(player, { account }) {
-        if (account.auth === 'microsoft') return;
+        // Whether AuthMe puts up a login wall for a premium account is a server-side
+        // setting, not something derivable from `account.auth` — don't assume it away.
         // wait for the prompt, answer it, wait for the confirmation
     },
 });
