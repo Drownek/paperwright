@@ -121,7 +121,14 @@ export default definePlugin<AuthAuthmeOptions>({
                 message: `authme: never saw a login/register prompt or session-resume message for "${account.username}"`,
             },
         );
-        if (promptResult === 'resumed') return;
+        if (promptResult === 'resumed') {
+            const authenticated = new RegExp(resolved.authenticatedPattern, 'i');
+            await poll(() => since(joinIndex, authenticated), {
+                timeout: resolved.timeoutMs,
+                message: `authme: "${account.username}" session resumed, but never confirmed as authenticated`,
+            });
+            return;
+        }
         const isRegistration = promptResult === 'register';
 
         // Everything below only looks at messages newer than the command. A server's greeting
