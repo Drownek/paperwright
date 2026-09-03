@@ -195,6 +195,18 @@ builds cannot reach the public ones. The URL and its credentials come from the e
 rather than from any file in the repository — see [`.env.example`](.env.example) and the
 [publishing guide](https://plugwright.dev/publishing).
 
+## Used in Production
+
+<a href="https://holyworld.io/">
+  <img align="left" src="https://github.com/user-attachments/assets/8c40f2ea-fa71-4299-ae05-28af23bf252c" width="80" alt="HolyWorld Logo" style="margin-right: 15px;">
+</a>
+
+<strong><a href="https://holyworld.io/">HolyWorld</a></strong> <br>
+~10,000 peak online players. Plugwright powers their CI/CD pipeline for end-to-end plugin testing. <br>
+<em>Integrated by <a href="https://github.com/monikon22">@monikon22</a></em>
+
+<br clear="both"/>
+
 ## Documentation & Examples
 
 For full examples on how to test **GUIs**, **multi-bot interactions**, **NMS**, and the complete **API Reference**, visit our official documentation site:
