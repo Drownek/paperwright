@@ -232,6 +232,23 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         const loadedPreflight: LoadedFile[] = [];
         for (const { file, pluginName } of preflightEntries) loadedPreflight.push(await loadFile(file, pluginName));
 
+        // Preflight files are loaded and validated on their own, before any main/suite spec
+        // file is imported — importing those here would run their top-level code ahead of
+        // preflight, against whatever state preflight was going to set up during execution.
+        validateConcurrency(loadedPreflight);
+
+        // Preflight: plugin auth/setup tests, run before anything else. A failure aborts the
+        // whole session.
+        for (const loaded of loadedPreflight) {
+            console.log(`\n${pc.blue(pc.bold(`Running preflight tests from: ${loaded.file} ${pc.dim(`(plugin ${loaded.pluginName})`)}`))}`);
+            const before = testResults.length;
+            await runLoadedFile(loaded);
+            const failed = testResults.slice(before).find(r => !r.skipped && !r.passed);
+            if (failed) {
+                throw new Error(`Preflight test "${failed.testName}" failed (plugin ${loaded.pluginName}): ${failed.error?.message ?? 'unknown error'}`);
+            }
+        }
+
         let testFiles = await findSpecFiles(config.tests.dir || process.cwd());
         if (testFileFilters) {
             const patterns = testFileFilters;
@@ -252,22 +269,11 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         const loadedSuite: LoadedFile[] = [];
         for (const { file, pluginName } of suiteEntries) loadedSuite.push(await loadFile(file, pluginName));
 
-        // Whole-session preflight: every file is loaded (imported once, registrations
-        // snapshotted) before any of them runs, so a misconfigured `concurrency` aborts here
-        // instead of after burning time on earlier tests.
-        validateConcurrency([...loadedPreflight, ...loadedMain, ...loadedSuite]);
-
-        // Preflight: plugin auth/setup tests, run before anything else. A failure aborts the
-        // whole session.
-        for (const loaded of loadedPreflight) {
-            console.log(`\n${pc.blue(pc.bold(`Running preflight tests from: ${loaded.file} ${pc.dim(`(plugin ${loaded.pluginName})`)}`))}`);
-            const before = testResults.length;
-            await runLoadedFile(loaded);
-            const failed = testResults.slice(before).find(r => !r.skipped && !r.passed);
-            if (failed) {
-                throw new Error(`Preflight test "${failed.testName}" failed (plugin ${loaded.pluginName}): ${failed.error?.message ?? 'unknown error'}`);
-            }
-        }
+        // Main and suite files are loaded (imported once, registrations snapshotted) before any
+        // of them runs, so a misconfigured `concurrency` aborts here instead of after burning
+        // time on earlier tests. Preflight has already run by this point, so this no longer
+        // imports them ahead of the state preflight sets up.
+        validateConcurrency([...loadedMain, ...loadedSuite]);
 
         console.log(`${pc.bold(`Found ${loadedMain.length} test file(s)${testFileFilters ? ` matching filter: ${testFileFilters.join(',')}` : ''}`)}\n`);
 
@@ -281,7 +287,6 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
             console.log(`\n${pc.blue(pc.bold(`Running tests from: ${loaded.file} ${pc.dim(`(plugin ${loaded.pluginName})`)}`))}`);
             await runLoadedFile(loaded);
         }
-
 
     } finally {
         await plugins.runCleanup(session, 'session');
