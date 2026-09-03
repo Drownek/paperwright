@@ -125,11 +125,12 @@ function createBotScope(session: Session, server: ServerWrapper, connOpts: BotCo
         players: () => [...connected],
         async close(): Promise<void> {
             // Only this scope's own bots — a concurrent sibling instance's bots are still
-            // running and must not be torn down by this one finishing first. Uses `ownBots`
-            // (everything this scope ever created), not `connected`, so a bot whose join()
-            // failed and never made it into `connected` still gets torn down here instead of
-            // leaking an open connection forever.
-            const ownBotsSet = new Set(ownBots);
+            // running and must not be torn down by this one finishing first. Union of two
+            // sources: `ownBots` catches a bot whose join() failed and never made it into
+            // `connected`; reading `p.bot` fresh off `connected` catches the opposite case —
+            // `player.rejoin()` swaps a player's `.bot` for a new connection under the same
+            // scope, and that swapped-in bot isn't the one `ownBots` captured at connect time.
+            const ownBotsSet = new Set([...ownBots, ...connected.map(p => p.bot)]);
             await session.disconnectAllBots(session.bots.filter(b => !ownBotsSet.has(b)));
             for (const { account, pool } of leased) pool.release(account);
             leased.length = 0;
