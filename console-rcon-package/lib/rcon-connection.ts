@@ -87,7 +87,6 @@ export class RconConnection {
 
         const waiter = this.pending.get(packet.id);
         if (waiter) {
-            this.pending.delete(packet.id);
             waiter.resolve(packet.payload);
         }
     }
@@ -98,18 +97,28 @@ export class RconConnection {
         if (!socket) throw new Error('RCON connection is not open');
 
         const id = this.nextId++;
+        const sentinelId = this.nextId++;
         return new Promise<string>((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pending.delete(id);
+                this.pending.delete(sentinelId);
                 reject(new Error(`RCON command timed out after ${timeoutMs}ms: ${cmd}`));
             }, timeoutMs);
 
+            let accumulated = '';
+
             this.pending.set(id, {
-                resolve: (payload) => { clearTimeout(timer); resolve(payload); },
-                reject: (err) => { clearTimeout(timer); reject(err); },
+                resolve: (payload) => { accumulated += payload; },
+                reject: (err) => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); reject(err); },
+            });
+
+            this.pending.set(sentinelId, {
+                resolve: () => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); resolve(accumulated); },
+                reject: (err) => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); reject(err); },
             });
 
             socket.write(encodePacket(id, PacketType.EXECCOMMAND, cmd));
+            socket.write(encodePacket(sentinelId, PacketType.EXECCOMMAND, ''));
         });
     }
 
