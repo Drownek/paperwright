@@ -247,6 +247,20 @@ describe.serial('kit lifecycle', { concurrency: 5 }, () => {
 
 `concurrency` multiplies how many bots run a test, not how many rows it produces in the summary. That row's duration is the slowest instance, and it carries an `instances` array with every instance's own outcome — bot username, pass or fail, duration — so a failure tells you which bot lost, not just that somebody did.
 
+<Tip>
+**Console and Server Log Assertions under Concurrency:**
+- **Player chat is isolated**: `expect(player).toHaveReceivedMessage(...)` checks that specific bot's private message buffer. It never collides between concurrent instances.
+- **Server console is shared**: `expect(server).toHaveReceivedMessage(...)` inspects the server's single shared log. When multiple bots run concurrently, distinguish log entries by incorporating the bot's unique username:
+  ```typescript
+  test('claims bounty', { concurrency: 3 }, async ({ player, server }) => {
+    player.chat('/bounty claim');
+    // Qualify server log assertions with the player's unique name:
+    await expect(server).toHaveReceivedMessage(new RegExp(`Bounty awarded to ${player.username}`));
+  });
+  ```
+- **Global commands**: Tests asserting on unparameterized global server events (like `/reload` or global broadcasts without player names) should run as standard single tests without the `concurrency` option.
+</Tip>
+
 ### How many you can ask for
 
 `concurrency: N` needs N free accounts. On an environment with an account pool, this is checked before any test in the run starts: ask for `concurrency: 10` against a 4-account pool and it fails immediately with a clear error, instead of the 5th bot hanging on a lease nobody's going to release. `LocalMode` has no pool — it mints a throwaway account per bot — so there's nothing to check there; its only real ceiling is the server's own `max-players`.

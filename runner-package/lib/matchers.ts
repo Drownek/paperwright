@@ -61,6 +61,20 @@ export class RunnerMatchers<T = unknown> extends Matchers<T> {
         throw new Error(this.isNot ? passMessage() : failMessage());
     }
 
+    /**
+     * Waits for the player or server console to receive a message matching the expected text or pattern.
+     *
+     * ### Concurrency & Isolation Guidance:
+     * - **`expect(player)`**: Checks `player.messageBuffer`, which is strictly isolated per bot.
+     *   Always prefer `expect(player)` when asserting on chat, notifications, or feedback addressed to a player.
+     *   It is completely safe from race conditions in concurrent tests (`concurrency: N`).
+     * - **`expect(server)`**: Reads `session.consoleLog`, which is a single shared stream for the entire server.
+     *   In concurrent test execution (`concurrency: N`), lines from other bots appear in this log simultaneously.
+     *   When asserting on server logs under concurrency, always qualify patterns with `${player.username}`
+     *   (e.g. `new RegExp(`Gave 100 to ${player.username}`)`) or narrow the search window with `options.since`.
+     *   For global assertions without a player identifier (e.g. `[Plugin] Reload complete`), run the test without
+     *   the `concurrency` option as a standard, single-runner test.
+     */
     async toHaveReceivedMessage(
         this: RunnerMatchers<PlayerWrapper | ServerWrapper>,
         expectedMessage: string | RegExp,

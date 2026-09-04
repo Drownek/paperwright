@@ -7,10 +7,10 @@ description: "Complete reference for all available assertion matchers."
 
 ### `toHaveReceivedMessage(message, options?)`
 
-Waits for the bot to receive a message containing (or exactly matching) the text or RegExp.
+Waits for the bot or server console to receive a message containing (or exactly matching) the text or RegExp.
 
 ```javascript
-// Partial match (default)
+// Partial match on player chat (default)
 await expect(player).toHaveReceivedMessage('Welcome');
 
 // RegEx match
@@ -28,10 +28,20 @@ await expect(player).toHaveReceivedMessage('Success', { since: marker });
 await expect(player).not.toHaveReceivedMessage('Error');
 ```
 
+<Tip>
+**Concurrency & Isolation Best Practices:**
+- **`expect(player)` vs `expect(server)`**: Each bot maintains its own private `messageBuffer`. Messages sent to one player never bleed into another bot's assertions, making `expect(player)` 100% safe in concurrent suites (`concurrency: N`).
+- **Asserting on Server Logs**: The server log (`expect(server)`) is a single shared stream for the entire server. In concurrent tests, always include `${player.username}` in your pattern to avoid matching lines produced by other bots:
+  ```javascript
+  await expect(server).toHaveReceivedMessage(new RegExp(`Granted VIP to ${player.username}`));
+  ```
+- **Global Server State**: If a test asserts on global server output with no player identifier (e.g., `[Plugin] Reload complete`), simply run it as a standard test without the `concurrency` option.
+</Tip>
+
 **Parameters:**
 - `message` (string | RegExp) - Text or pattern to search for
 - `options.strict` (boolean) - Require exact match (default: false)
-- `options.since` (number) - Buffer index to search from
+- `options.since` (number) - Buffer index to search from (e.g. `server.startIndex` or from `player.getMessageBufferIndex()`)
 - `options.timeout` (number) - Max wait time in ms
 
 

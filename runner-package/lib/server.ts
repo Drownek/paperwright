@@ -19,6 +19,9 @@ export class ServerWrapper {
         this.startIndex = this.session.consoleLog.length;
     }
 
+    /** Executes a console command synchronously. Note: when running under `concurrency: N`,
+     *  console output is shared across all concurrent tests. Prefer player actions or qualify
+     *  commands with `player.username`. */
     execute(cmd: string): void {
         if (!this.session.console) {
             throw new Error('No server console available for this environment');
