@@ -5,7 +5,7 @@ import type { Session } from './session.js';
 import { MessageBuffer } from './session.js';
 import type { BotConnectionOptions } from './environment.js';
 import type { Account } from './account.js';
-import { poll } from './utils.js';
+import { poll, waitUntil } from './utils.js';
 import { randomUUID } from 'node:crypto';
 import pc from 'picocolors';
 
@@ -407,6 +407,42 @@ export class PlayerWrapper {
             },
             { message: `Expected ${count}x "${item}" in inventory` }
         );
+    }
+
+    /**
+     * Clears the player's inventory using `minecraft:clear` and waits until the
+     * bot's client-side inventory reflects the empty state.
+     *
+     * If `item` is provided, clears only items matching that name.
+     */
+    async clearInventory(
+        itemOrOptions?: string | { timeout?: number },
+        options: { timeout?: number } = {}
+    ): Promise<void> {
+        this.requireServer();
+        const item = typeof itemOrOptions === 'string' ? itemOrOptions : undefined;
+        const opts = typeof itemOrOptions === 'object' ? itemOrOptions : options;
+        const timeout = opts.timeout ?? 5000;
+
+        if (item) {
+            this.serverWrapper!.execute(`minecraft:clear ${this.username} ${item}`);
+            await waitUntil(
+                () => !this.bot.inventory.items().some(i => i.name.includes(item)),
+                {
+                    message: `Inventory item "${item}" for ${this.username} was not cleared`,
+                    timeout,
+                }
+            );
+        } else {
+            this.serverWrapper!.execute(`minecraft:clear ${this.username}`);
+            await waitUntil(
+                () => this.bot.inventory.items().length === 0,
+                {
+                    message: `Inventory for ${this.username} was not cleared`,
+                    timeout,
+                }
+            );
+        }
     }
 
     private requireServer(): void {

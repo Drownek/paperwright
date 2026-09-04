@@ -79,6 +79,16 @@ Gives items to the player.
 await player.giveItem('diamond', 64);
 ```
 
+### `player.clearInventory(item?, options?)`
+
+Clears the player's inventory and waits until the client-side inventory state reflects it. If an item name is specified, only that item is cleared.
+
+```javascript
+await player.clearInventory();
+// or clear specific item
+await player.clearInventory('diamond');
+```
+
 ### Properties
 
 <ResponseField name="inventory" type="Inventory">
@@ -174,7 +184,7 @@ Repeatedly executes a function until it returns a value that is not `undefined`,
 </ParamField>
 
 ```javascript
-await poll(() => player.inventory.hasItem('diamond'));
+const diamond = await poll(() => player.bot.inventory.items().find(i => i.name === 'diamond'));
 ```
 
 ### `waitForAssertion(fn, options?)`
