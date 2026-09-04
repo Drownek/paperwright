@@ -138,9 +138,7 @@ export function opTest(name: string, fnOrOptions: TestFn | TestOptions, maybeFn?
     const options = typeof fnOrOptions === 'function' ? {} : fnOrOptions;
     const fn = typeof fnOrOptions === 'function' ? fnOrOptions : maybeFn!;
     registerTest(name, options, async (context: TestContext) => {
-        // The label is what a player already opped earlier in the same block carries, so a
-        // second `opTest` in one `describe.serial` doesn't re-run the command.
-        if (!context.player.abilities.has('op')) await context.player.makeOp();
+        await context.player.makeOp();
         await fn(context);
     });
 }

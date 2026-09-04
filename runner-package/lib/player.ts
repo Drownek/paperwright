@@ -46,12 +46,6 @@ export class PlayerWrapper {
     private _spawnPromise: Promise<void> | null = null;
     private _listenersBot: Bot | null = null;
     private _account?: Account;
-    /** Labels describing server state this player is known to carry — set automatically by
-     *  `makeOp`/`deOp`/`setGameMode`, and by hand via `mark`/`unmark` for anything else. Survives
-     *  `rejoin()`: it describes server state, which a reconnect doesn't touch. Nothing in the
-     *  core reads a label's meaning; they exist for a test (or a plugin) to leave a note on a
-     *  player one step of a `describe.serial` block can read in the next. */
-    private readonly _abilities = new Set<string>();
 
     constructor(bot: Bot, session: Session) {
         this.bot = bot;
@@ -204,29 +198,6 @@ export class PlayerWrapper {
         this.serverWrapper = server;
     }
 
-    /** Read-only snapshot of this player's ability labels. */
-    get abilities(): ReadonlySet<string> {
-        return this._abilities;
-    }
-
-    /** Records that this player carries `ability`. A statement, not a check — nothing here
-     *  verifies it against real server state. */
-    mark(ability: string): void {
-        this._abilities.add(ability);
-    }
-
-    /** Removes `ability`. No-op if the player never carried it. */
-    unmark(ability: string): void {
-        this._abilities.delete(ability);
-    }
-
-    private markGameMode(mode: string): void {
-        for (const ability of this._abilities) {
-            if (ability.startsWith('gamemode:')) this._abilities.delete(ability);
-        }
-        this._abilities.add(`gamemode:${mode}`);
-    }
-
     getCurrentGui(): GuiWrapper | null {
         let currentWindow = this.bot.currentWindow;
         return currentWindow ? new GuiWrapper(this.bot, currentWindow as Window) : null;
@@ -285,46 +256,15 @@ export class PlayerWrapper {
     }
 
     async makeOp(): Promise<void> {
-        this.requireServer();
-        const command = `minecraft:op ${this.username}`;
-
-        // A console that answers (RCON) says whether the command worked; the confirmation is
-        // never broadcast to the player, so there is nothing to wait for in the chat buffer.
-        if (this.session.console?.output === 'responses') {
-            const response = await this.serverWrapper!.executeAndWait(command);
-            // "Made X a server operator" on success, "Nothing changed. The player already is
-            // an operator" when it was already granted — both mean the player is op now.
-            if (/operator/i.test(response)) {
-                this.mark('op');
-                return;
-            }
-            throw new Error(`Player ${this.username} was not opped: ${response.trim() || 'no response from the console'}`);
-        }
-
-        const messagesSince = this.messageBuffer.length;
-        const consoleSince = this.session.consoleLog.length;
-        this.serverWrapper!.execute(command);
-
-        // "Made X a server operator" reaches the player's own chat. "Nothing changed. The
-        // player already is an operator" — the case a reused, already-op player hits on a
-        // second `makeOp()` — never does; it only ever shows up in the server's own log.
-        await poll(
-            () =>
-                this.messageBuffer.slice(messagesSince).find(m => m.includes(`Made ${this.username} a server operator`)) ??
-                this.session.consoleLog.slice(consoleSince).find(m => /operator/i.test(m)),
-            { message: `Player ${this.username} was not opped` }
-        );
-        this.mark('op');
+        await this._internalSyncBarrier(`minecraft:op ${this.username}`);
     }
 
     async deOp(): Promise<void> {
-        await this.executeAndSync(`minecraft:deop ${this.username}`);
-        this.unmark('op');
+        await this._internalSyncBarrier(`minecraft:deop ${this.username}`);
     }
 
     async setGameMode(mode: 'survival' | 'creative' | 'adventure' | 'spectator'): Promise<void> {
         if (this.bot.game.gameMode === mode) {
-            this.markGameMode(mode);
             return;
         }
         this.requireServer();
@@ -334,7 +274,6 @@ export class PlayerWrapper {
             () => this.bot.game.gameMode === mode ? true : undefined,
             { message: `Game mode did not change to "${mode}"` }
         );
-        this.markGameMode(mode);
     }
 
     async teleport(x: number, y: number, z: number): Promise<void> {
@@ -451,24 +390,14 @@ export class PlayerWrapper {
         }
     }
 
-    private async executeAndSync(cmd: string): Promise<void> {
+    private async _internalSyncBarrier(cmd: string): Promise<void> {
         this.requireServer();
-
-        // A console that answers has already finished the command by the time it replies. The
-        // marker below exists for the stdio console, where output and command completion are
-        // two unrelated streams.
-        if (this.session.console?.output === 'responses') {
-            await this.serverWrapper!.executeAndWait(cmd);
-            return;
-        }
-
         const syncId = `sync_${randomUUID().split('-')[0]}`;
         this.serverWrapper!.execute(cmd);
         this.serverWrapper!.execute(`minecraft:say ${syncId}`);
-
         await poll(
             () => this.messageBuffer.find(m => m.includes(syncId)),
-            { message: `Server command sync timed out for: ${cmd}` }
+            { message: `Internal server sync timed out for: ${cmd}` }
         );
     }
 }
