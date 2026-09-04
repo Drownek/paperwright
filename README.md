@@ -114,8 +114,13 @@ This command is interactive, so simply follow the prompts on your screen:
 Setting up CI takes less than 5 minutes. Use the official [plugwright-action](https://github.com/Drownek/plugwright-action) to run your entire test suite on every pull request.
 
 ```yaml
-name: E2E Tests
-on: [push, pull_request]
+name: Plugwright E2E Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
   test:
@@ -123,6 +128,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: drownek/plugwright-action@v1
+        with:
+          java-version: "17"
+          node-version: "24"
+          # Path to your plugin gradle project if it's not at the project's root
+          working-directory: "."
 ```
 
 ## Documentation & Examples
