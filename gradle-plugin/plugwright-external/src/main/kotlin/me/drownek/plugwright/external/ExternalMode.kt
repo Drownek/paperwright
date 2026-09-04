@@ -119,7 +119,6 @@ object ExternalMode : PlugwrightMode<ExternalEnvironmentSpec> {
 
         ctx.pluginConfigs(project.provider { spec.pluginsSpec.refs() })
         val configProvider = project.provider { ConfigNodeBuilder().also { serialize(spec, it) }.build() }
-        val journalFile = project.layout.buildDirectory.file("plugwright/$envName-journal.jsonl")
 
         ctx.register("Ping", PlugwrightPingTask::class.java) {
             environmentName.set(envName)
@@ -127,15 +126,6 @@ object ExternalMode : PlugwrightMode<ExternalEnvironmentSpec> {
             testsDir.set(ctx.testsDir)
             configFile.set(project.layout.buildDirectory.file("tmp/plugwright/$envName-ping.json"))
             environmentConfig.set(configProvider)
-        }
-
-        ctx.register("Clean", PlugwrightCleanupTask::class.java) {
-            environmentName.set(envName)
-            modeId.set(id)
-            testsDir.set(ctx.testsDir)
-            configFile.set(project.layout.buildDirectory.file("tmp/plugwright/$envName-cleanup.json"))
-            environmentConfig.set(configProvider)
-            this.journalFile.set(journalFile)
         }
 
         // No prepareTask: unlike local, external doesn't provision anything before

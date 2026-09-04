@@ -11,7 +11,6 @@ export interface EnvironmentCapabilities {
     freshState: boolean;
     arbitraryUsernames: boolean;
     lifecycle: boolean;
-    cleanupStrategy: 'wipe' | 'compensating' | 'none';
 }
 
 export interface BotConnectionOptions {

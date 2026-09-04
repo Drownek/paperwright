@@ -34,7 +34,6 @@ const BASE_CAPABILITIES: EnvironmentCapabilities = {
     freshState: false,
     arbitraryUsernames: true,
     lifecycle: false,
-    cleanupStrategy: 'compensating',
 };
 
 /**

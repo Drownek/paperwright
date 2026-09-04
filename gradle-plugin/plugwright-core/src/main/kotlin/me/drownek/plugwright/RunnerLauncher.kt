@@ -10,13 +10,13 @@ import java.io.File
 /**
  * Config-writing and `cli.js` resolution shared by [PlugwrightTestTask] (one environment),
  * [PlugwrightMatrixTask] (many, in one process each), and the service tasks a mode registers
- * for itself (ping, compensating cleanup). Process execution itself stays on
+ * for itself (ping). Process execution itself stays on
  * [AbstractNodeTask] — every task type here extends it and already has `runCommand`/`resolveNode`.
  */
 object RunnerLauncher {
 
     /** Everything needed to write one environment's `config.json` and locate its `cli.js`.
-     *  [jsonReportFile]/[junitReportFile] are omitted for service runs (`--ping`, `--cleanup`)
+     *  [jsonReportFile]/[junitReportFile] are omitted for service runs (`--ping`)
      *  that never produce a report. */
     data class Entry(
         val environmentName: String,
@@ -36,8 +36,6 @@ object RunnerLauncher {
         val runtimePackage: String? = null,
         /** Named export holding the factory; null means the package's default export. */
         val runtimeExport: String? = null,
-        /** Crash-recovery journal path for `Session.journal`; null disables on-disk persistence. */
-        val journalFile: File? = null,
     )
 
     fun writeConfig(entry: Entry) {
@@ -86,7 +84,6 @@ object RunnerLauncher {
                     }
                 }
             }
-            entry.journalFile?.let { put("journal", it.absolutePath) } ?: putNull("journal")
         }.build()
 
         RunnerConfigWriter.write(entry.configFile, root)

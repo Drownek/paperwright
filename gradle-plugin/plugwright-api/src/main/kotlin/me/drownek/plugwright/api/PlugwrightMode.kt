@@ -50,6 +50,6 @@ interface PlugwrightMode<S : EnvironmentSpec> {
      */
     fun serialize(spec: S, node: ConfigNodeBuilder)
 
-    /** Registers the tasks for this environment: provisioning, cleanup, mode-specific extras. */
+    /** Registers the tasks for this environment: provisioning, mode-specific extras. */
     fun registerTasks(spec: S, ctx: TaskRegistrationContext) {}
 }

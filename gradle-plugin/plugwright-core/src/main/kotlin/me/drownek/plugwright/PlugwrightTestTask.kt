@@ -61,10 +61,6 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
     @get:Internal
     abstract val pluginConfigs: ListProperty<PluginRef>
 
-    /** Crash-recovery journal for this environment's run. */
-    @get:Internal
-    abstract val journalFile: RegularFileProperty
-
     /** npm package exporting this environment's factory. Unset for a built-in mode, which the
      *  runner already carries. */
     @get:Input
@@ -127,7 +123,6 @@ abstract class PlugwrightTestTask : AbstractNodeTask() {
             jsonReportFile = jsonReportFile.get().asFile,
             junitReportFile = junitReportFile.get().asFile,
             pluginConfigs = pluginConfigs.get(),
-            journalFile = journalFile.orNull?.asFile,
             runtimePackage = runtimePackage.orNull,
             runtimeExport = runtimeExport.orNull,
         )

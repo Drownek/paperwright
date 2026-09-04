@@ -27,7 +27,6 @@ internal data class MatrixEnvironmentInput(
     val excludeTests: List<String>,
     val environmentConfig: Provider<ConfigNode>,
     val pluginConfigs: Provider<List<PluginRef>>,
-    val journalFile: File?,
     val runtimePackage: String? = null,
     val runtimeExport: String? = null,
 )
@@ -125,7 +124,6 @@ abstract class PlugwrightMatrixTask : AbstractNodeTask() {
                 jsonReportFile = env.jsonReportFile,
                 junitReportFile = env.junitReportFile,
                 pluginConfigs = env.pluginConfigs.get(),
-                journalFile = env.journalFile,
                 runtimePackage = env.runtimePackage,
                 runtimeExport = env.runtimeExport,
             )

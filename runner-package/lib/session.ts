@@ -1,6 +1,5 @@
 import mineflayer, { Bot } from 'mineflayer';
 import pc from 'picocolors';
-import { CleanupJournal } from './journal.js';
 import type { Environment, BotConnectionOptions } from './environment.js';
 import type { ServerConsole } from './console.js';
 import type { PlayerWrapper } from './player.js';
@@ -54,16 +53,14 @@ export class Session {
     console: ServerConsole | null = null;
     readonly bots: Bot[] = [];
     readonly consoleLog = new MessageBuffer();
-    readonly journal: CleanupJournal;
 
     /** Set once by the runner after loading plugins. Fired by `PlayerWrapper.join()` on
      *  every connection (initial join and every `rejoin()`), not called directly by
      *  `Session` itself. */
     onPlayerCreate: ((player: PlayerWrapper, ctx: { account: Account; env: Environment }) => Promise<void> | void) | null = null;
 
-    constructor(env: Environment, journalPath: string | null = null) {
+    constructor(env: Environment) {
         this.env = env;
-        this.journal = new CleanupJournal(journalPath);
     }
 
     /** Pulls the console channel from the environment. Called once `env.setup()` has produced one. */

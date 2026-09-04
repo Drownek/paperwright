@@ -44,8 +44,6 @@ export type { PlugwrightPlugin, SessionContext, CleanupContext, PluginTestRef, M
 export { AccountPool } from './lib/account.js';
 export type { Account, AccountsConfig } from './lib/account.js';
 export { AdminBotConsole } from './lib/admin-bot-console.js';
-export { CleanupJournal } from './lib/journal.js';
-export type { JournalEntry } from './lib/journal.js';
 export { externalEnvironment };
 export type { ExternalEnvironmentConfig, ExternalConsoleChannelConfig } from './lib/environments/external.js';
 
@@ -101,7 +99,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
     const testResults: TestResult[] = [];
 
     const env = await resolveEnvironment(config.environment);
-    const session = new Session(env, config.journal ?? null);
+    const session = new Session(env);
     const plugins = new PluginHost();
     await plugins.load(config.plugins ?? []);
     // Must happen before the first spec file is imported — see PluginHost.registerMatchers.
@@ -289,7 +287,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
         }
 
     } finally {
-        await plugins.runCleanup(session, 'session');
+        await plugins.runCleanup(session);
         await plugins.teardown();
         await session.disconnectAllBots();
         await env.teardown();
@@ -323,7 +321,7 @@ export async function runPingSession(config: RunnerConfig = loadRunnerConfig()):
     console.log(pc.bold(`plugwright ping: environment "${config.environment.name}" (${config.environment.mode})`));
 
     const env = await resolveEnvironment(config.environment);
-    const session = new Session(env, null);
+    const session = new Session(env);
     const plugins = new PluginHost();
     await plugins.load(config.plugins ?? []);
     plugins.registerMatchers();
@@ -390,49 +388,3 @@ export async function runPingSession(config: RunnerConfig = loadRunnerConfig()):
     setTimeout(() => process.exit(exitCode), 500).unref();
 }
 
-/**
- * `--cleanup`: runs every loaded plugin's `cleanup({ scope: 'manual' })` handler and reports
- * what the crash-recovery journal still has outstanding afterward. Replaying journal entries
- * is the plugin's job — it owns what a typed entry means — this only gives it the chance.
- */
-export async function runCleanupSession(config: RunnerConfig = loadRunnerConfig()): Promise<void> {
-    console.log(pc.bold(`plugwright cleanup: environment "${config.environment.name}"`));
-
-    const env = await resolveEnvironment(config.environment);
-    const session = new Session(env, config.journal ?? null);
-    const plugins = new PluginHost();
-    await plugins.load(config.plugins ?? []);
-    plugins.registerMatchers();
-
-    let exitCode = 0;
-    try {
-        const outstandingBefore = session.journal.outstanding();
-        console.log(pc.dim(`journal: ${outstandingBefore.length} outstanding entr${outstandingBefore.length === 1 ? 'y' : 'ies'}`));
-
-        await env.setup(session);
-        session.refreshConsole();
-        await plugins.setup(session);
-
-        await plugins.runCleanup(session, 'manual');
-
-        const outstandingAfter = session.journal.outstanding();
-        if (outstandingAfter.length > 0) {
-            console.log(pc.yellow(`journal: ${outstandingAfter.length} entr${outstandingAfter.length === 1 ? 'y' : 'ies'} still outstanding after cleanup`));
-            for (const entry of outstandingAfter) console.log(pc.yellow(`  - ${JSON.stringify(entry)}`));
-        } else {
-            console.log(pc.green('journal: clean'));
-        }
-    } catch (error) {
-        console.error(pc.red(`cleanup failed: ${(error as Error).message}`));
-        exitCode = 1;
-    } finally {
-        await plugins.teardown();
-        await session.disconnectAllBots();
-        await env.teardown();
-    }
-
-    // Both: the unref'd timer only fires if something else is still holding the loop
-    // open (a lingering socket); process.exitCode carries the result when it isn't.
-    process.exitCode = exitCode;
-    setTimeout(() => process.exit(exitCode), 500).unref();
-}

@@ -13,7 +13,6 @@ const CAPABILITIES: EnvironmentCapabilities = {
     freshState: true,
     arbitraryUsernames: true,
     lifecycle: true,
-    cleanupStrategy: 'wipe',
 };
 
 /** Talks to the Paper process over its stdin/stdout, same as the runner always has. */

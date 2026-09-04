@@ -17,9 +17,6 @@ export interface SessionContext<O = unknown> {
 
 export interface CleanupContext {
     session: Session;
-    /** 'session' — after the run finishes; 'manual' — a dedicated cleanup invocation
-     *  (e.g. `plugwrightClean<Env>` for a mode with a compensating cleanup strategy). */
-    scope: 'session' | 'manual';
 }
 
 export interface PluginTestRef {

@@ -115,10 +115,10 @@ export class PluginHost {
             );
     }
 
-    async runCleanup(session: Session, scope: 'session' | 'manual'): Promise<void> {
+    async runCleanup(session: Session): Promise<void> {
         for (const { plugin } of [...this.plugins].reverse()) {
             try {
-                await plugin.cleanup?.({ session, scope });
+                await plugin.cleanup?.({ session });
             } catch (error) {
                 console.error(pc.red(`[plugin ${plugin.name}] cleanup error: ${(error as Error).message}`));
             }

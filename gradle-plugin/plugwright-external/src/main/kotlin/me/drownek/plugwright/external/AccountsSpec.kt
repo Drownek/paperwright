@@ -23,8 +23,7 @@ class PoolSpec(private val objects: ObjectFactory) {
  *  accounts on demand, up to [max] connected at once; each one registers on its first login. */
 class AutoRegisterSpec(objects: ObjectFactory) {
     /**
-     * Must start with `pw_` — generated accounts have to be recognizable as test accounts, the
-     * same convention the cleanup journal requires of entities it creates.
+     * Must start with `pw_` — generated accounts have to be recognizable as test accounts.
      *
      * The placeholder decides what happens to a name once the test holding it finishes.
      * `%d` (optionally zero-padded, `%04d`) numbers a fixed set of accounts the run keeps coming
