@@ -14,9 +14,9 @@ export default definePlugin({
 
     // Runs before every test, with the bot already connected.
     async beforeEach({ player, server }) {
-        // An environment without a console has no way to run commands, and says so.
         if (!server.session.env.capabilities.console) return;
-        await server.executeAndWait(`minecraft:gamemode survival ${player.username}`);
+
+        await player.clearInventory();
     },
 
     // What this returns becomes part of the object every test destructures:

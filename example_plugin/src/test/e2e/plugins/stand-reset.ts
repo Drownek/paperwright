@@ -1,4 +1,4 @@
-import { definePlugin } from '@plugwright/runner';
+import { definePlugin, waitUntil } from '@plugwright/runner';
 
 /** What a fresh account starts with, per ExamplePlugin's own default. */
 const STARTING_BALANCE = 1000;
@@ -26,8 +26,16 @@ export default definePlugin({
         if (!server.session.env.capabilities.console) return;
 
         await player.deOp();
-        await server.executeAndWait(`minecraft:clear ${player.username}`);
-        await server.executeAndWait(`eco set ${player.username} ${STARTING_BALANCE}`);
-        await server.executeAndWait(`kit reset ${player.username}`);
+        await player.clearInventory();
+
+        await waitUntil(async () => {
+            const res = await server.executeAndWait(`eco set ${player.username} ${STARTING_BALANCE}`);
+            return res.includes(`Set balance of ${player.username} to $${STARTING_BALANCE}`);
+        }, { message: `Console did not confirm balance reset for ${player.username}` });
+
+        await waitUntil(async () => {
+            const res = await server.executeAndWait(`kit reset ${player.username}`);
+            return res.includes(`Kit cooldown reset for ${player.username}`);
+        }, { message: `Console did not confirm kit cooldown reset for ${player.username}` });
     },
 });

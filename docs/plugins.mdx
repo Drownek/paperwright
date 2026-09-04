@@ -142,16 +142,15 @@ A plugin is an npm package (or a single compiled file) whose default export impl
 ```ts
 import { definePlugin } from '@plugwright/runner';
 
-export default definePlugin<{ resetCommand?: string }>({
+export default definePlugin({
     name: 'staging-reset',
-
-    setup({ options }) {
-        resetCommand = options.resetCommand ?? '/pw reset';
-    },
 
     async beforeEach({ player, server }) {
         if (!server.session.env.capabilities.console) return;
-        await server.executeAndWait(`minecraft:clear ${player.username}`);
+
+        // Reset permissions and clear inventory before letting the test start
+        await player.deOp();
+        await player.clearInventory();
     },
 });
 ```
