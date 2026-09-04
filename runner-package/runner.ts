@@ -256,7 +256,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
             testFiles = testFiles.filter(file =>
                 patterns.some(pattern => {
                     const fileName = basename(file).replace(/\.spec\.js$/, '');
-                    const matches = fileName.includes(pattern) || file.includes(pattern);
+                    const matches = fileName.includes(pattern);
                     console.log(pc.dim(`  Testing ${file} (basename: ${fileName}) against pattern "${pattern}": ${matches}`));
                     return matches;
                 })
