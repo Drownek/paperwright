@@ -25,8 +25,8 @@ export class MessageBuffer {
         this.lines.length = 0;
     }
 
-    slice(start?: number): string[] {
-        return start !== undefined ? this.lines.slice(start) : [...this.lines];
+    slice(start?: number, end?: number): string[] {
+        return this.lines.slice(start, end);
     }
 
     find(predicate: (line: string) => boolean): string | undefined {

@@ -38,7 +38,9 @@ class StdioConsole implements ServerConsole {
     }
 
     /** stdio has no synchronous response channel, so we round-trip through a `/say` marker
-     *  and poll the console log for it, the same trick `PlayerWrapper.executeAndSync` uses. */
+     *  and poll the console log for it, the same trick `PlayerWrapper.executeAndSync` uses.
+     *  Returns all lines produced between command submission and the sync marker.
+     */
     async executeAndWait(cmd: string, timeoutMs: number = 5000): Promise<string> {
         const syncId = `sync_${randomUUID().split('-')[0]}`;
         const since = this.session.consoleLog.length;
@@ -47,8 +49,11 @@ class StdioConsole implements ServerConsole {
 
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
-            const line = this.session.consoleLog.slice(since).find(l => l.includes(syncId));
-            if (line) return line;
+            const recent = this.session.consoleLog.slice(since);
+            const syncIdx = recent.findIndex(l => l.includes(syncId));
+            if (syncIdx !== -1) {
+                return recent.slice(0, syncIdx).join('\n');
+            }
             await new Promise(resolve => setTimeout(resolve, 50));
         }
         throw new Error(`Console command sync timed out for: ${cmd}`);
