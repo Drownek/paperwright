@@ -33,6 +33,7 @@ export function encodePacket(id: number, type: number, payload: string): Buffer 
 /** Decodes one packet body — everything after the 4-byte length prefix a caller already
  *  stripped off while reassembling the stream. */
 export function decodePacketBody(body: Buffer): DecodedPacket {
+    if (body.length < 10) throw new Error('Packet body too short');
     const id = body.readInt32LE(0);
     const type = body.readInt32LE(4);
     const payload = body.toString('utf8', 8, body.length - 2);
