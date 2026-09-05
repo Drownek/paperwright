@@ -7,12 +7,16 @@ export interface RconConsoleConfig {
     password: string;
 }
 
+export interface RconConsole extends ServerConsole {
+    executeAndWait(cmd: string, timeoutMs?: number): Promise<string>;
+}
+
 /**
  * `ServerConsole` over RCON: unlike `stdio` and `admin-bot`, the protocol gives a synchronous
  * response to every command, so `executeAndWait` doesn't need the `minecraft:say <syncId>`
  * round-trip trick those two rely on.
  */
-export function rconConsole(config: RconConsoleConfig): ServerConsole {
+export function rconConsole(config: RconConsoleConfig): RconConsole {
     const connection = new RconConnection(config.host, config.port, config.password);
 
     return {

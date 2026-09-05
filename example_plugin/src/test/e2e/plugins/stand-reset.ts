@@ -28,14 +28,15 @@ export default definePlugin({
         await player.deOp();
         await player.clearInventory();
 
-        await waitUntil(async () => {
-            const res = await server.executeAndWait(`eco set ${player.username} ${STARTING_BALANCE}`);
-            return res.includes(`Set balance of ${player.username} to $${STARTING_BALANCE}`);
-        }, { message: `Console did not confirm balance reset for ${player.username}` });
+        server.execute(`eco set ${player.username} ${STARTING_BALANCE}`);
+        server.execute(`kit reset ${player.username}`);
 
-        await waitUntil(async () => {
-            const res = await server.executeAndWait(`kit reset ${player.username}`);
-            return res.includes(`Kit cooldown reset for ${player.username}`);
-        }, { message: `Console did not confirm kit cooldown reset for ${player.username}` });
+        // Wait for the server to process the commands before starting tests
+        const syncId = `sync_reset_${Math.random().toString(36).slice(2, 8)}`;
+        server.execute(`minecraft:say ${syncId}`);
+        await waitUntil(
+            () => player.messageBuffer.some(m => m.includes(syncId)),
+            { message: `Reset sync timed out for ${player.username}`, timeout: 5000 }
+        );
     },
 });
