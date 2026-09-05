@@ -193,7 +193,7 @@ export class Session {
 
     /** Feeds raw environment output (e.g. Minecraft server stdout/stderr) into the console log buffer. */
     writeConsoleOutput(data: Buffer): void {
-        const text = this._remainder + data.toString().replace(/\r\n/g, '\n');
+        const text = (this._remainder + data.toString()).replace(/\r\n/g, '\n');
         const lines = text.split('\n');
         this._remainder = lines.pop() || '';
         for (const line of lines) {
