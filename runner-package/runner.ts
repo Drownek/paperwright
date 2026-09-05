@@ -43,7 +43,6 @@ export { definePlugin, PLUGIN_API_VERSION } from './lib/plugin.js';
 export type { PlugwrightPlugin, SessionContext, CleanupContext, PluginTestRef, MatcherFn } from './lib/plugin.js';
 export { AccountPool } from './lib/account.js';
 export type { Account, AccountsConfig } from './lib/account.js';
-export { AdminBotConsole } from './lib/admin-bot-console.js';
 export { externalEnvironment };
 export type { ExternalEnvironmentConfig, ExternalConsoleChannelConfig } from './lib/environments/external.js';
 

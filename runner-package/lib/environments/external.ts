@@ -6,11 +6,10 @@ import type { SecretRef } from '../config.js';
 import { resolveSecret } from '../config.js';
 import { AccountPool } from '../account.js';
 import type { AccountsConfig } from '../account.js';
-import { AdminBotConsole } from '../admin-bot-console.js';
 import { sleep, importOptionalPackage } from '../utils.js';
 
 export interface ExternalConsoleChannelConfig {
-    kind: 'rcon' | 'adminBot';
+    kind: 'rcon';
     port?: number;
     username?: string;
     password?: SecretRef;
@@ -127,13 +126,6 @@ class ExternalEnvironment implements Environment {
                 host: this.config.host,
                 port: channel.port ?? 25575,
                 password: channel.password ? resolveSecret(channel.password) : '',
-            });
-        }
-
-        if (channel.kind === 'adminBot') {
-            return new AdminBotConsole(session, connOpts, {
-                username: channel.username!,
-                password: channel.password ? resolveSecret(channel.password) : undefined,
             });
         }
 
