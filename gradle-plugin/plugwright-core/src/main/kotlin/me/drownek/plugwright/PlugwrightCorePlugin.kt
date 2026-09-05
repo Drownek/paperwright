@@ -117,7 +117,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
     private fun wireEnvironments(
         project: Project,
         extension: PlugwrightExtension,
-        plugwrightCompileTests: org.gradle.api.tasks.TaskProvider<PlugwrightCompileTestsTask>,
+        plugwrightCompileTests: TaskProvider<PlugwrightCompileTestsTask>,
         defaultNodeInstallDir: File
     ) {
         // No environments { } block: fold the deprecated flat properties into one implicit
@@ -225,7 +225,7 @@ class PlugwrightCorePlugin : Plugin<Project> {
 
             val environmentConfigProvider = ctx.environmentConfigProvider
                 ?: project.provider { ConfigNodeBuilder().apply { mode.serialize(entry.spec, this) }.build() }
-            val pluginConfigsProvider = (ctx.pluginConfigsProvider ?: project.provider { emptyList<PluginRef>() })
+            val pluginConfigsProvider = (ctx.pluginConfigsProvider ?: project.provider { emptyList() })
                 .map { refs -> refs.map { resolveWorkspacePlugin(it, layout) } }
 
             // A plugin declared by npm name is installed alongside the environment's own

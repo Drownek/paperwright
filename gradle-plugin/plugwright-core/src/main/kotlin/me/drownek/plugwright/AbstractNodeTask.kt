@@ -119,9 +119,8 @@ abstract class AbstractNodeTask : DefaultTask() {
         }
         stderrThread.isDaemon = true
 
-        var stdinThread: Thread? = null
         if (interactive) {
-            stdinThread = Thread {
+            val stdinThread = Thread {
                 try {
                     val reader = System.`in`.bufferedReader(Charsets.UTF_8)
                     val out = process.outputStream

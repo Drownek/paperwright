@@ -7,7 +7,6 @@ import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
-import java.io.File
 
 /**
  * Runs the compiled test suite against one environment.

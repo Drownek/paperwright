@@ -63,11 +63,9 @@ class ExternalEnvironment implements Environment {
         return this.accountPool;
     }
 
-    async setup(session: Session): Promise<void> {
-        const connOpts = this.connection();
-
+    async setup(_session: Session): Promise<void> {
         for (const channel of this.config.console ?? []) {
-            const candidate = await this.buildChannel(channel, session, connOpts);
+            const candidate = await this.buildChannel(channel);
             if (!candidate) continue;
             try {
                 if (await candidate.probe()) {
@@ -96,8 +94,6 @@ class ExternalEnvironment implements Environment {
 
     private async buildChannel(
         channel: ExternalConsoleChannelConfig,
-        session: Session,
-        connOpts: BotConnectionOptions,
     ): Promise<ServerConsole | null> {
         if (channel.kind === 'rcon') {
             // A bare string literal here would make tsc try to resolve

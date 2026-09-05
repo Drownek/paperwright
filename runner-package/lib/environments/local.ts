@@ -1,5 +1,4 @@
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
-import { randomUUID } from 'node:crypto';
 import pc from 'picocolors';
 import type { Environment, EnvironmentCapabilities, BotConnectionOptions } from '../environment.js';
 import type { ServerConsole } from '../console.js';
@@ -22,7 +21,6 @@ class StdioConsole implements ServerConsole {
 
     constructor(
         private readonly serverProcess: ChildProcessWithoutNullStreams,
-        private readonly session: Session,
     ) {}
 
     async probe(): Promise<boolean> {
@@ -114,7 +112,7 @@ export class LocalEnvironment implements Environment {
 
     console(): ServerConsole | null {
         if (!this.serverProcess || !this.session) return null;
-        return new StdioConsole(this.serverProcess, this.session);
+        return new StdioConsole(this.serverProcess);
     }
 
     async teardown(): Promise<void> {

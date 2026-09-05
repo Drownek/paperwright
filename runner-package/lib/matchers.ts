@@ -212,9 +212,9 @@ interface PollOptions {
 }
 
 export class PollMatchers<T> {
-    private fn: () => T | Promise<T>;
-    private options: Required<Omit<PollOptions, 'message'>> & { message?: string };
-    private isNot: boolean;
+    private readonly fn: () => T | Promise<T>;
+    private readonly options: Required<Omit<PollOptions, 'message'>> & { message?: string };
+    private readonly isNot: boolean;
 
     constructor(fn: () => T | Promise<T>, options: PollOptions = {}, isNot: boolean = false) {
         this.fn = fn;
