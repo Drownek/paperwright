@@ -35,7 +35,7 @@ rcon.password=…
 
 ## What tests can do with it
 
-Commands and their answers, which covers `server.execute(...)`, `server.executeAndWait(...)`, `player.makeOp()` and everything built on them.
+Commands and their answers, which covers `server.execute(...)`, `player.makeOp()` and everything built on them. You can also use `session.console.executeAndWait(...)` which is specific to this package.
 
 What it cannot do is show a test the rest of the server log. RCON reports `output: 'responses'`, so `expect(server).toHaveReceivedMessage(...)` fails fast with an explanation instead of timing out. Mark those tests `requires: ['consoleOutput:full']` and they skip on an RCON-only environment.
 

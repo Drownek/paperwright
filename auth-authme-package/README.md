@@ -2,7 +2,7 @@
 
 Reference [plugwright](https://github.com/Drownek/plugwright) authentication plugin for a server running AuthMe, or anything else that asks for a password in chat.
 
-On every bot connection — the first bot of a test, a second bot from `createPlayer()`, every `player.rejoin()`, and the `external` mode's admin-bot console — it waits for the server's prompt and answers it. Registration is followed through to the login it triggers, because a command sent between the two is still rejected as unauthenticated.
+On every bot connection — the first bot of a test, a second bot from `createPlayer()`, and every `player.rejoin()` — it waits for the server's prompt and answers it. Registration is followed through to the login it triggers, because a command sent between the two is still rejected as unauthenticated.
 
 Microsoft (online-mode) accounts go through the same handshake by default — whether AuthMe still puts up a login wall for a premium account is a server-side setting, not something this plugin assumes. Set `skipOnMicrosoftAccount` if you've confirmed yours doesn't.
 

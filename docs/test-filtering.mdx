@@ -56,7 +56,6 @@ Capability keys come from the environment's own report, after it has connected:
 | `freshState` | boolean | Each test gets a clean world and a clean player |
 | `arbitraryUsernames` | boolean | Bots may pick their own names |
 | `lifecycle` | boolean | The server can be restarted or stopped |
-| `cleanupStrategy` | `wipe` / `compensating` / `none` | How cleanup happens after the run |
 
 A bare key is satisfied by anything other than `false`, `'none'` or an absent value. To demand one specific value, use `key:value`:
 

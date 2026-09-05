@@ -124,46 +124,6 @@ That's for a scenario tied to state somebody provisioned on that account — a p
 
 Connects, probes the console channels, leases one account and authenticates with it, then disconnects. No tests run. When something is wrong with the stand — RCON password rotated, login plugin changed its messages, account pool exhausted — this fails in seconds with a specific message instead of failing test after test five minutes into a run.
 
-## Cleaning up
 
-`plugwrightClean<Env>` means something different per mode. For `LocalMode` it wipes the run directory. For `ExternalMode` there is nothing to wipe: it starts the runner in cleanup mode, which connects, loads the plugins and calls their `cleanup({ scope: 'manual' })` handlers. No files are touched.
 
-```kotlin
-// in a runner plugin
-definePlugin({
-    name: 'staging',
-    async cleanup({ session, scope }) {
-        // scope: 'session' after a run, 'manual' from plugwrightCleanStaging
-        await session.console?.executeAndWait('/pw purge-test-data');
-    },
-});
-```
-
-### The journal
-
-Finalizers registered with `TestContext.cleanup()` run in a `finally`. A `SIGKILL` skips `finally` blocks, and on a real server the leftovers accumulate — a hundred junk warps a month later.
-
-For obligations that must survive that, record a typed entry in `build/plugwright/<env>-journal.jsonl`:
-
-```ts
-test('creating a warp', async ({ player, server, cleanup }) => {
-    const warpName = `pw_${crypto.randomUUID().slice(0, 8)}`;
-    const id = warpName;
-
-    player.chat(`/setwarp ${warpName}`);
-    server.session.journal.record(id, { kind: 'warp', name: warpName });
-
-    cleanup(() => {
-        server.execute(`/delwarp ${warpName}`);
-        server.session.journal.forget(id);
-    });
-
-    await expect(player).toHaveReceivedMessage('Warp created');
-});
-```
-
-Entries are typed records interpreted by a plugin's `cleanup` handler, never raw command strings. A file that replays raw commands against a live server is a way to run arbitrary commands on it. Whatever is still in the journal when the next run starts is what a crash left behind; `plugwrightClean<Env>` prints anything a cleanup pass could not resolve.
-
-## What the runner reports as skipped
-
-After `setup()`, the environment reports what it actually supports. For `ExternalMode` that is: no fresh state, no server lifecycle, compensating cleanup, arbitrary usernames, and console plus op only if a console channel answered. Tests that declare `requires` are skipped against that list, with the reason in the report. See [Test Filtering](/test-filtering).
+After `setup()`, the environment reports what it actually supports. For `ExternalMode` that is: no fresh state, no server lifecycle, arbitrary usernames, and console plus op only if a console channel answered. Tests that declare `requires` are skipped against that list, with the reason in the report. See [Test Filtering](/test-filtering).

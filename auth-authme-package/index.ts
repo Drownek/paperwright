@@ -73,9 +73,10 @@ const isEnabled = (value: boolean | string): boolean => value === true || value 
 
 /**
  * Reference authentication plugin for a server running AuthMe (or anything with the same
- * login/register-by-chat flow). `onPlayerCreate` fires on every bot connection — the initial
- * join and every `player.rejoin()` — and on the `external` mode's admin-bot console too, since
- * that connects through the exact same `PlayerWrapper.join()` path a test bot does.
+ * login/register-by-chat flow). The credentials go straight into the runner's plugin configuration, and the runner manages
+ * the authentication flow. It happens exactly once per bot — on the very first
+ * join and every `player.rejoin()` — before test code ever gets a chance to see
+ * the player.
  */
 export default definePlugin<AuthAuthmeOptions>({
     name: 'authme',

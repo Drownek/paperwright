@@ -151,7 +151,6 @@ class VelocityEnvironment implements Environment {
         freshState: false,
         arbitraryUsernames: true,
         lifecycle: true,
-        cleanupStrategy: 'compensating',
     };
 
     async setup(session: Session): Promise<void> { /* connect, probe, warm up */ }

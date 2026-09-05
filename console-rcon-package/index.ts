@@ -12,9 +12,9 @@ export interface RconConsole extends ServerConsole {
 }
 
 /**
- * `ServerConsole` over RCON: unlike `stdio` and `admin-bot`, the protocol gives a synchronous
+ * `ServerConsole` over RCON: unlike `stdio`, the protocol gives a synchronous
  * response to every command, so `executeAndWait` doesn't need the `minecraft:say <syncId>`
- * round-trip trick those two rely on.
+ * round-trip trick.
  */
 export function rconConsole(config: RconConsoleConfig): RconConsole {
     const connection = new RconConnection(config.host, config.port, config.password);

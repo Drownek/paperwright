@@ -70,7 +70,7 @@ export default definePlugin({
 });
 ```
 
-`onPlayerCreate` fires on every connection: the bot a test starts with, a second bot from `createPlayer()`, every `player.rejoin()`, and the admin-bot console channel. A "log in first" test fires once, in whatever order the spec files happen to load, and leaves every other connection unauthenticated. If you want the visible reassurance of a login test in the report, ship one as a `preflight` test alongside the hook.
+`onPlayerCreate` fires on every connection: the bot a test starts with, a second bot from `createPlayer()`, and every `player.rejoin()`. A "log in first" test fires once, in whatever order the spec files happen to load, and leaves every other connection unauthenticated. If you want the visible reassurance of a login test in the report, ship one as a `preflight` test alongside the hook.
 
 ## Hooks and `describe.serial`
 
