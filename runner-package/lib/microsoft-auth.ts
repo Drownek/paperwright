@@ -1,6 +1,12 @@
 import path from 'node:path';
 import os from 'node:os';
-import { Authflow, Titles } from 'prismarine-auth';
+import type { Authflow as AuthflowInstance } from 'prismarine-auth';
+import prismarineAuth from 'prismarine-auth';
+// prismarine-auth is CJS; named imports aren't reliable under Node's ESM interop
+// (cjs-module-lexer missed `Titles` here at runtime — "does not provide an export named
+// 'Titles'" — even though both are plain properties of module.exports). Destructure the
+// default import instead.
+const { Authflow, Titles } = prismarineAuth;
 
 /** Same default `minecraft-protocol` itself falls back to (via the `minecraft-folder-path`
  *  package) when `profilesFolder` isn't set — kept in sync here since our custom `auth` function
@@ -52,7 +58,7 @@ export function microsoftAuthWithCache(username: string) {
             options.flow = 'live';
         }
 
-        const authflow: Authflow = client.authflow ?? new Authflow(options.username, options.profilesFolder, options, options.onMsaCode);
+        const authflow: AuthflowInstance = client.authflow ?? new Authflow(options.username, options.profilesFolder, options, options.onMsaCode);
         client.authflow = authflow;
 
         const cached = cache.get(username);
