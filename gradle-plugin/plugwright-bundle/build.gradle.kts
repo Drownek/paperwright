@@ -168,3 +168,12 @@ tasks.register("publishToPrivateRepository") {
         }
     }
 }
+
+// `maven-publish` already registers `publish` as the lifecycle task for this module, but on
+// its own it only reaches the private repository above; the portal side lives under
+// `plugin-publish`'s `publishPlugins` and never joins it on its own. Wiring both wrapper
+// tasks onto `publish` makes it the one command a release runs, still skipping either side
+// exactly as `publishToPrivateRepository`/`publishToPublicRepository` do on their own.
+tasks.named("publish") {
+    dependsOn(tasks.named("publishToPrivateRepository"), tasks.named("publishToPublicRepository"))
+}
