@@ -5,6 +5,7 @@ import type { Environment, BotConnectionOptions } from './environment.js';
 import type { ServerConsole } from './console.js';
 import type { PlayerWrapper } from './player.js';
 import type { Account } from './account.js';
+import { microsoftAuthWithCache } from './microsoft-auth.js';
 
 /**
  * Append-only line buffer. Replaces the old module-level `string[]` singletons
@@ -77,7 +78,9 @@ export class Session {
             port: options.port,
             username: options.username,
             version: options.version,
-            auth: options.auth,
+            // A custom function here (instead of the 'microsoft' string) so profile/certificate
+            // fetches are cached across bots for the same account — see microsoft-auth.ts.
+            auth: options.auth === 'microsoft' ? microsoftAuthWithCache(options.username) : options.auth,
             // mineflayer's own default (logErrors: true) does `bot.on('error', e =>
             // console.log(e))` unconditionally — fine for an occasional bad packet, but a
             // server sending something outside the client's protocol data (e.g. a particle

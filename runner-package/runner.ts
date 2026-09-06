@@ -305,6 +305,7 @@ export async function runTestSession(config: RunnerConfig = loadRunnerConfig()):
 
         exitCode = printTestSummary(testResults);
 
+        process.exitCode = exitCode;
         setTimeout(() => {
             process.exit(exitCode);
         }, 1000).unref();

@@ -40,6 +40,7 @@
     "js-yaml": "^4.1.0",
     "mineflayer": "^4.0.0",
     "picocolors": "^1.1.1",
+    "prismarine-auth": "^3.1.1",
     "source-map-support": "^0.5.21"
   },
   "devDependencies": {
