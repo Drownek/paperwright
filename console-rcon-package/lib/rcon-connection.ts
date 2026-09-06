@@ -91,34 +91,46 @@ export class RconConnection {
         }
     }
 
+    private _commandQueue = Promise.resolve();
+
     async executeAndWait(cmd: string, timeoutMs: number): Promise<string> {
-        await this.ensureConnected();
-        const socket = this.socket;
-        if (!socket) throw new Error('RCON connection is not open');
-
-        const id = this.nextId++;
-        const sentinelId = this.nextId++;
         return new Promise<string>((resolve, reject) => {
-            const timer = setTimeout(() => {
-                this.pending.delete(id);
-                this.pending.delete(sentinelId);
-                reject(new Error(`RCON command timed out after ${timeoutMs}ms: ${cmd}`));
-            }, timeoutMs);
+            this._commandQueue = this._commandQueue.then(async () => {
+                try {
+                    await this.ensureConnected();
+                    const socket = this.socket;
+                    if (!socket) throw new Error('RCON connection is not open');
 
-            let accumulated = '';
+                    const id = this.nextId++;
+                    const sentinelId = this.nextId++;
+                    
+                    const result = await new Promise<string>((innerResolve, innerReject) => {
+                        const timer = setTimeout(() => {
+                            this.pending.delete(id);
+                            this.pending.delete(sentinelId);
+                            innerReject(new Error(`RCON command timed out after ${timeoutMs}ms: ${cmd}`));
+                        }, timeoutMs);
 
-            this.pending.set(id, {
-                resolve: (payload) => { accumulated += payload; },
-                reject: (err) => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); reject(err); },
-            });
+                        let accumulated = '';
 
-            this.pending.set(sentinelId, {
-                resolve: () => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); resolve(accumulated); },
-                reject: (err) => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); reject(err); },
-            });
+                        this.pending.set(id, {
+                            resolve: (payload) => { accumulated += payload; },
+                            reject: (err) => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); innerReject(err); },
+                        });
 
-            socket.write(encodePacket(id, PacketType.EXECCOMMAND, cmd));
-            socket.write(encodePacket(sentinelId, PacketType.EXECCOMMAND, ''));
+                        this.pending.set(sentinelId, {
+                            resolve: () => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); innerResolve(accumulated); },
+                            reject: (err) => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); innerReject(err); },
+                        });
+
+                        socket.write(encodePacket(id, PacketType.EXECCOMMAND, cmd));
+                        socket.write(encodePacket(sentinelId, PacketType.EXECCOMMAND, ''));
+                    });
+                    resolve(result);
+                } catch (err) {
+                    reject(err);
+                }
+            }).catch(() => {});
         });
     }
 
