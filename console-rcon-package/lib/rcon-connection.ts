@@ -34,6 +34,7 @@ export class RconConnection {
             this.socket = socket;
 
             socket.once('connect', () => {
+                socket.setNoDelay(true);
                 this.pendingAuth = {
                     resolve: () => resolve(),
                     reject: (err) => reject(err),
@@ -102,29 +103,19 @@ export class RconConnection {
                     if (!socket) throw new Error('RCON connection is not open');
 
                     const id = this.nextId++;
-                    const sentinelId = this.nextId++;
                     
                     const result = await new Promise<string>((innerResolve, innerReject) => {
                         const timer = setTimeout(() => {
                             this.pending.delete(id);
-                            this.pending.delete(sentinelId);
                             innerReject(new Error(`RCON command timed out after ${timeoutMs}ms: ${cmd}`));
                         }, timeoutMs);
 
-                        let accumulated = '';
-
                         this.pending.set(id, {
-                            resolve: (payload) => { accumulated += payload; },
-                            reject: (err) => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); innerReject(err); },
-                        });
-
-                        this.pending.set(sentinelId, {
-                            resolve: () => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); innerResolve(accumulated); },
-                            reject: (err) => { clearTimeout(timer); this.pending.delete(id); this.pending.delete(sentinelId); innerReject(err); },
+                            resolve: (payload) => { clearTimeout(timer); this.pending.delete(id); innerResolve(payload); },
+                            reject: (err) => { clearTimeout(timer); this.pending.delete(id); innerReject(err); },
                         });
 
                         socket.write(encodePacket(id, PacketType.EXECCOMMAND, cmd));
-                        socket.write(encodePacket(sentinelId, PacketType.EXECCOMMAND, ''));
                     });
                     resolve(result);
                 } catch (err) {
